@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bass Tabs</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">♪</span> <span class="brand-name">Bass Tabs</span></div>
+    <div class="top-actions">
+      <label class="btn primary" title="Open a WAV (or any audio) file">
+        <input type="file" id="file" accept="audio/*,.wav" hidden>
+        Upload<span class="wide-only">&nbsp;audio</span>
+      </label>
+      <button class="btn" id="demo">Demo</button>
+      <button class="btn icon" id="settings-btn" title="Settings" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section id="empty" class="empty">
+      <div class="drop" id="drop">
+        <div class="drop-icon">🎸</div>
+        <h1>Turn a bass recording into tabs</h1>
+        <p>Drop a <b>.wav</b> file here (mp3/ogg/m4a also work), or use <b>Upload audio</b>.<br>
+          Works best on isolated / solo bass parts. Everything runs locally in your browser.</p>
+        <div class="drop-actions">
+          <label class="btn primary big"><input type="file" id="file2" accept="audio/*,.wav" hidden>Choose file</label>
+          <button class="btn big" id="demo2">Try a demo riff</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="progress" class="progress" hidden>
+      <div class="progress-label" id="progress-label">Analyzing…</div>
+      <div class="progress-bar"><div id="progress-fill"></div></div>
+    </section>
+
+    <section id="song" hidden>
+      <div class="song-head">
+        <h2><span id="song-title">Untitled</span> <span class="muted">Bass Tab</span></h2>
+        <div class="song-sub" id="song-sub"></div>
+        <div class="hint">Click to move the cursor · drag across bars to loop · click a note to edit it</div>
+      </div>
+      <div id="tab-host" class="tab-host"></div>
+    </section>
+  </main>
+
+  <div id="inspector" class="inspector" hidden>
+    <div class="insp-head"><b id="insp-title"></b><button class="x" id="insp-close" aria-label="Close">×</button></div>
+    <div class="insp-row"><span class="lbl">Position</span><div id="insp-pos" class="chips"></div></div>
+    <div class="insp-row"><span class="lbl">Pitch</span>
+      <button class="btn sm" id="insp-down">− semitone</button>
+      <button class="btn sm" id="insp-up">+ semitone</button>
+      <button class="btn sm" id="insp-oct-down">−8va</button>
+      <button class="btn sm" id="insp-oct-up">+8va</button>
+    </div>
+    <div class="insp-row"><button class="btn sm danger" id="insp-del">Delete note</button>
+      <span class="muted small">Keys: ↑↓ string · +/− pitch · ←→ next note · Del</span></div>
+  </div>
+
+  <aside id="settings" class="drawer" hidden>
+    <div class="drawer-head"><b>Settings</b><button class="x" id="settings-close" aria-label="Close">×</button></div>
+
+    <h4>Instrument</h4>
+    <label>Tuning <select id="tuning"></select></label>
+    <label>Frets <input type="number" id="max-fret" min="12" max="24" value="20"></label>
+
+    <h4>Rhythm</h4>
+    <label>Tempo (BPM)
+      <span class="inline"><input type="number" id="bpm" min="30" max="300" step="0.1" value="120">
+        <button class="btn sm" id="bpm-half">½×</button><button class="btn sm" id="bpm-double">2×</button></span>
+    </label>
+    <label>First downbeat (s)
+      <span class="inline"><input type="number" id="offset" step="0.01" value="0">
+        <button class="btn sm" id="beat-prev" title="Shift bar lines one beat earlier">−1 beat</button>
+        <button class="btn sm" id="beat-next" title="Shift bar lines one beat later">+1 beat</button></span>
+    </label>
+    <label>Time signature
+      <select id="beats"><option value="4">4/4</option><option value="3">3/4</option><option value="2">2/4</option><option value="5">5/4</option><option value="6">6/4</option><option value="7">7/4</option></select>
+    </label>
+    <label>Grid
+      <select id="grid"><option value="4">16th notes</option><option value="2">8th notes</option></select>
+    </label>
+    <button class="btn sm" id="tempo-auto">Re-detect tempo</button>
+
+    <h4>Note detection <span class="muted small">(re-runs and resets edits)</span></h4>
+    <label>Onset sensitivity <input type="range" id="sens" min="0" max="1" step="0.05" value="0.55"><output id="sens-out"></output></label>
+    <label>Min note length (ms) <input type="range" id="min-note" min="20" max="250" step="5" value="60"><output id="min-note-out"></output></label>
+    <label>Pitch confidence <input type="range" id="min-conf" min="0.3" max="0.95" step="0.01" value="0.7"><output id="min-conf-out"></output></label>
+    <label>Noise gate (dB) <input type="range" id="gate" min="-60" max="-10" step="1" value="-34"><output id="gate-out"></output></label>
+
+    <h4>Export</h4>
+    <div class="inline">
+      <button class="btn sm" id="export-txt">Download .txt tab</button>
+      <button class="btn sm" id="copy-txt">Copy tab</button>
+    </div>
+    <p class="muted small" id="tuning-info"></p>
+  </aside>
+
+  <footer class="transport" id="transport">
+    <div class="tgroup">
+      <button class="tbtn" id="rewind" title="Back to start (Home)" aria-label="Back to start">⏮</button>
+      <button class="tbtn play" id="play" title="Play / Pause (Space)" aria-label="Play">▶</button>
+      <span class="time" id="time">0:00 / 0:00</span>
+    </div>
+    <div class="tgroup">
+      <span class="tlabel">Speed</span>
+      <button class="tbtn sm" id="slower" title="Slower ([)">−</button>
+      <span class="speed" id="speed">100%</span>
+      <button class="tbtn sm" id="faster" title="Faster (])">+</button>
+    </div>
+    <div class="tgroup">
+      <button class="toggle" id="loop" title="Loop selection (L)">⟲ Loop</button>
+      <button class="toggle" id="metro" title="Metronome (M)">Metronome</button>
+      <button class="toggle" id="countin" title="Count-in before playing">Count-in</button>
+    </div>
+    <div class="tgroup mix">
+      <label title="Original recording volume">Audio <input type="range" id="vol-orig" min="0" max="1" step="0.01" value="1"></label>
+      <label title="Synthesized tab playback volume">Tab <input type="range" id="vol-synth" min="0" max="1" step="0.01" value="0"></label>
+    </div>
+  </footer>
+
+  <audio id="audio" preload="auto"></audio>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -11,7 +11,7 @@ rhythm:
   beats_per_bar: 4      # 2..7 (x/4 time)
 
 detection:
-  onset_sensitivity: 0.55   # 0..1  higher = more new-note starts detected
+  onset_sensitivity: 0.3   # 0..1  higher = more new-note starts detected
   min_note_ms: 60           # notes shorter than this are dropped
   pitch_confidence: 0.7     # 0.3..0.95  higher = fewer, cleaner notes
   noise_gate_db: -34        # -60..-10   higher = ignore more quiet sound

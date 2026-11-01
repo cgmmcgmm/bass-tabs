@@ -38,7 +38,8 @@ Then open http://localhost:8000. Click **Demo** to try it without a file. It als
   Audio isn't embedded. Keep the project file in the same folder as the audio files. To reopen, choose the `.basstab` together with its audio files (multi-select), Tracks are matched by file name. If some are missing, you're asked to locate them: choose the files, or (Chrome/Edge on desktop) **Look in a folder**, which loads only the listed files.
 - **Transpose**: the **Key** control (−12…+12 semitones) shifts the audio, the tab and the synth, independently of speed. Tracks with 🔒 in the Mixer keep their original pitch (for example your own recordings).
 - **Editing**: click a note to move it to another string or fret, change its pitch or octave, or delete it.
-- **Export**: plain-text tab (.txt), downloaded or copied.
+- **Export**: plain-text tab (.txt), downloaded or copied, or a **MIDI** file (tempo, time signature, transposed pitches, bass sound matching the synth preset).
+- **Synth sounds**: six tab-synth presets (finger, pick, slap, synth, muted, sub), chosen in the Mixer. Choosing one plays a preview.
 
 ### Keyboard
 

@@ -6,7 +6,7 @@ export const DEFAULTS = {
   detection: { onset_sensitivity: 0.55, min_note_ms: 60, pitch_confidence: 0.7, noise_gate_db: -34 },
   playback: {
     drag_to_loop: 'auto', speed_step_percent: 5, min_speed_percent: 25, max_speed_percent: 150, count_in: false, metronome: false,
-    metronome_volume: 0.6, tab_synth_volume: 0, slide_time_ms: 60,
+    metronome_volume: 0.6, tab_synth_volume: 0, synth_preset: 'finger', slide_time_ms: 60,
   },
   mixer: { tab_track_match: 'bass', unknown_label: 'Unknown' },
   helper: { url: '' },

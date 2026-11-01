@@ -3,45 +3,92 @@
 export const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 /**
+ * Tab synth sound presets.
+ * osc: [waveform, level, detune cents]; lp: low-pass start/end (multiples of the note
+ * frequency), sweep time, resonance; decay: seconds to reach `sustain` (fraction of peak);
+ * noise: level of a short attack click (pick / slap).
+ */
+export const SYNTH_PRESETS = {
+  finger: { label: 'Finger (warm)', gm: 33, osc: [['sawtooth', 1, 0], ['sine', 0.6, 0]],
+    lp: [14, 2.5, 0.25, 2], max: 4000, decay: 0.3, sustain: 0.45, noise: 0 },
+  pick: { label: 'Pick (bright)', gm: 34, osc: [['sawtooth', 1, 0], ['square', 0.25, 0], ['sine', 0.5, 0]],
+    lp: [30, 6, 0.2, 1.5], max: 7000, decay: 0.25, sustain: 0.4, noise: 0.25 },
+  slap: { label: 'Slap (punchy)', gm: 37, osc: [['sawtooth', 1, 0], ['sawtooth', 0.6, 7], ['sine', 0.7, 0]],
+    lp: [45, 4, 0.1, 4], max: 9000, decay: 0.12, sustain: 0.3, noise: 0.45 },
+  synth: { label: 'Synth bass', gm: 39, osc: [['square', 0.8, 0], ['sawtooth', 0.6, -8], ['sine', 0.8, -1200]],
+    lp: [20, 3, 0.35, 9], max: 5000, decay: 0.4, sustain: 0.7, noise: 0 },
+  muted: { label: 'Muted (palm mute)', gm: 33, osc: [['triangle', 1, 0], ['sine', 0.8, 0]],
+    lp: [5, 1.6, 0.08, 1], max: 1500, decay: 0.12, sustain: 0.08, noise: 0.05 },
+  sub: { label: 'Sub (pure)', gm: 33, osc: [['sine', 1, 0], ['triangle', 0.25, 0]],
+    lp: [8, 8, 0.1, 0.7], max: 3000, decay: 0.5, sustain: 0.8, noise: 0 },
+};
+
+let noiseBuf = null;
+function noise(ctx) {
+  if (!noiseBuf || noiseBuf.sampleRate !== ctx.sampleRate) {
+    noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.05), ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.008));
+  }
+  return noiseBuf;
+}
+
+/**
  * Play one plucked voice. `glides` = [{ at (s after `when`), midi }] for slides /
  * legato: the pitch moves into each new note over `glideTime` with no new attack.
  */
-export function pluck(ctx, dest, when, midi, dur, vel = 0.8, glides = [], glideTime = 0.06) {
+export function pluck(ctx, dest, when, midi, dur, vel = 0.8, glides = [], glideTime = 0.06, preset = 'finger') {
+  const P = SYNTH_PRESETS[preset] || SYNTH_PRESETS.finger;
   const f = mtof(midi);
-  const o1 = ctx.createOscillator(), o2 = ctx.createOscillator();
-  o1.type = 'sawtooth'; o2.type = 'sine';
-  o1.frequency.setValueAtTime(f, when); o2.frequency.setValueAtTime(f, when);
+  const d = Math.max(0.06, dur);
+  const end = when + d;
+
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.Q.value = P.lp[3];
+  lp.frequency.setValueAtTime(Math.min(P.max, f * P.lp[0]), when);
+  lp.frequency.exponentialRampToValueAtTime(Math.max(80, Math.min(P.max, f * P.lp[1])), when + P.lp[2]);
+
+  const oscs = P.osc.map(([type, level, cents]) => {
+    const o = ctx.createOscillator();
+    o.type = type; o.detune.value = cents;
+    o.frequency.setValueAtTime(f, when);
+    const g = ctx.createGain(); g.gain.value = level / P.osc.length * 1.6;
+    o.connect(g); g.connect(lp);
+    return o;
+  });
   let prevMidi = midi, prevT = when;
   for (const gl of glides) {
     const t1 = when + gl.at;
     const t0 = Math.max(prevT + 0.005, t1 - glideTime);
     if (t1 <= t0) continue;
-    for (const o of [o1, o2]) {
+    for (const o of oscs) {
       o.frequency.setValueAtTime(mtof(prevMidi), t0);
       o.frequency.exponentialRampToValueAtTime(mtof(gl.midi), t1);
     }
     prevMidi = gl.midi; prevT = t1;
   }
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass'; lp.Q.value = 2;
-  lp.frequency.setValueAtTime(Math.min(4000, f * 14), when);
-  lp.frequency.exponentialRampToValueAtTime(Math.max(120, f * 2.5), when + 0.25);
+
   const g = ctx.createGain();
   const peak = 0.18 + 0.25 * vel;
-  const d = Math.max(0.06, dur);
-  const end = when + d;
   // attack -> decay -> sustain -> release, all strictly in time order
   const atk = when + 0.006;
-  const decayEnd = Math.min(when + 0.3, Math.max(atk + 0.01, end - 0.03));
-  const sustain = peak * Math.pow(0.45, (decayEnd - when) / 0.3); // where the decay curve is at decayEnd
+  const decayEnd = Math.min(when + P.decay, Math.max(atk + 0.01, end - 0.03));
+  const sustain = peak * Math.pow(P.sustain, (decayEnd - when) / P.decay); // where the decay curve is at decayEnd
   g.gain.setValueAtTime(0.0001, when);
   g.gain.exponentialRampToValueAtTime(peak, atk);
-  g.gain.exponentialRampToValueAtTime(sustain, decayEnd);
-  g.gain.setValueAtTime(sustain, Math.max(decayEnd, end - 0.03));
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, sustain), decayEnd);
+  g.gain.setValueAtTime(Math.max(0.0002, sustain), Math.max(decayEnd, end - 0.03));
   g.gain.exponentialRampToValueAtTime(0.0001, end + 0.03);
-  const sub = ctx.createGain(); sub.gain.value = 0.6;
-  o1.connect(lp); o2.connect(sub); sub.connect(lp); lp.connect(g); g.connect(dest);
-  o1.start(when); o2.start(when); o1.stop(end + 0.05); o2.stop(end + 0.05);
+  lp.connect(g); g.connect(dest);
+
+  if (P.noise > 0) { // attack click (pick / slap)
+    const n = ctx.createBufferSource(); n.buffer = noise(ctx);
+    const hp = ctx.createBiquadFilter(); hp.type = 'bandpass'; hp.frequency.value = 2500; hp.Q.value = 0.8;
+    const ng = ctx.createGain(); ng.gain.value = P.noise * (0.5 + vel);
+    n.connect(hp); hp.connect(ng); ng.connect(dest);
+    n.start(when);
+  }
+  for (const o of oscs) { o.start(when); o.stop(end + 0.05); }
 }
 
 export function click(ctx, dest, when, accent) {

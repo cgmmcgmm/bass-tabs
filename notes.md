@@ -7,11 +7,11 @@
 - ~~Multiple tracks / stems with a mixer~~: volume, mute, solo, labels and instrument icons.
 - ~~Save and reopen projects~~
 - ~~Transpose~~, with 🔒 to keep a track's original pitch.
+- ~~Synth sound presets~~: finger, pick, slap, synth, muted and sub, chosen in the Mixer.
+- ~~MIDI export~~: Settings → Export.
 - ~~Use an uploaded recording as a track~~: add it in the Mixer and lock it with 🔒. (Comparing a recording against the tab is still open, below.)
 
 ### Open (roughly quickest first)
-- **Synth sounds:** 3–5 presets for the tab synth (e.g. finger, pick, slap/bright, sub/synth bass, muted).
-- **MIDI export** of the tab.
 - **Live input:** play along through an audio interface or mic. The input is monitored and mixed with the tracks, and there's a latency setting.
 - **Section markers** (intro, verse, chorus) on bars, plus repeat signs.
 - **Record the live input** while the song plays, in sync with the tab and loop. The take is added as a locked track.

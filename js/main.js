@@ -1,6 +1,7 @@
 import { TUNINGS, segmentNotes, estimateTempo, arrange, positionsFor, noteName, toAsciiTab } from './transcribe.js';
 import { renderTab, cursorPos, timeAt, rangeRects } from './tab-render.js';
-import { pluck, click, makeDemo, encodeWav } from './synth.js';
+import { pluck, click, makeDemo, encodeWav, SYNTH_PRESETS } from './synth.js';
+import { toMidi } from './midi.js';
 import { Mixer } from './mixer.js';
 import { loadConfig } from './config.js';
 import { KINDS, autoLabel, setAutoLabels, setUnknownLabel } from './kinds.js';
@@ -40,6 +41,7 @@ function applyConfigDefaults() {
   set('min-conf', c.detection.pitch_confidence);
   set('gate', c.detection.noise_gate_db);
   set('vol-synth', c.playback.tab_synth_volume);
+  if (SYNTH_PRESETS[c.playback.synth_preset]) $('synth-preset').value = c.playback.synth_preset;
   set('vol-metro', c.playback.metronome_volume);
 }
 const fmt = { sens: (v) => v, 'min-note': (v) => v + ' ms', 'min-conf': (v) => v, gate: (v) => v + ' dB' };
@@ -154,7 +156,7 @@ async function transcribeTrack(id, buffer, { tempo = false, tuning = false, note
 }
 
 /* ---------- projects ---------- */
-const SETTING_IDS = ['tuning', 'max-fret', 'bpm', 'offset', 'beats', 'grid', 'sens', 'min-note', 'min-conf', 'gate', 'vol-synth', 'vol-metro'];
+const SETTING_IDS = ['synth-preset', 'tuning', 'max-fret', 'bpm', 'offset', 'beats', 'grid', 'sens', 'min-note', 'min-conf', 'gate', 'vol-synth', 'vol-metro'];
 
 function projectData() {
   const tab = mixer.tracks.find((t) => t.id === state.tabTrack);
@@ -513,6 +515,17 @@ function applyVolumes() {
   metroGain.gain.value = +$('vol-metro').value;
 }
 $('vol-synth').addEventListener('input', applyVolumes);
+for (const [k, P] of Object.entries(SYNTH_PRESETS)) {
+  const o = document.createElement('option'); o.value = k; o.textContent = P.label; $('synth-preset').appendChild(o);
+}
+// Audition a preset: a short bass phrase, even if the synth fader is down.
+$('synth-preset').addEventListener('change', async () => {
+  if (ctx.state !== 'running') await ctx.resume();
+  const g = ctx.createGain(); g.gain.value = Math.max(0.5, +$('vol-synth').value) * 1.5; g.connect(ctx.destination);
+  const t = ctx.currentTime + 0.05, pr = $('synth-preset').value;
+  [[28, 0, 0.22], [28, 0.25, 0.22], [40, 0.5, 0.22], [31, 0.75, 0.22], [33, 1.0, 0.45]]
+    .forEach(([m, at, d]) => pluck(ctx, g, t + at, m, d, 0.8, [], 0.06, pr));
+});
 $('vol-metro').addEventListener('input', applyVolumes);
 applyVolumes();
 
@@ -611,7 +624,7 @@ function scheduleRange(from, to, at, lr, pass) {
       }
       const end = lr ? Math.min(last.qEnd, lr[1]) : last.qEnd;
       pluck(ctx, synthGain, at(n.qStart), n.pm, ((end - n.qStart) / state.speed) * 0.95, n.vel,
-        glides, CONFIG.playback.slide_time_ms / 1000 / state.speed);
+        glides, CONFIG.playback.slide_time_ms / 1000 / state.speed, $('synth-preset').value);
     }
   }
   if (state.metro) {
@@ -886,6 +899,14 @@ $('export-txt').onclick = () => {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([asciiTab()], { type: 'text/plain' }));
   a.download = (state.title || 'bass-tab') + '.txt';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('export-midi').onclick = () => {
+  if (!state.song) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(toMidi(state.song, { title: state.title || 'Bass', program: SYNTH_PRESETS[$('synth-preset').value]?.gm ?? 33 }));
+  a.download = (state.title || 'bass-tab') + '.mid';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };

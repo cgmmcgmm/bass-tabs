@@ -250,3 +250,6 @@ kbd { display: inline-block; min-width: 22px; text-align: center; padding: 2px 6
 .speed.key.on { color: #fff; background: var(--accent-2); }
 .ms.lock { font-size: 11px; }
 .ms.lock.on { background: var(--accent-2); border-color: var(--accent-2); }
+
+.synth-preset { font: inherit; font-size: 12px; padding: 3px 4px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); max-width: 150px; }

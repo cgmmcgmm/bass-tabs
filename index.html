@@ -136,6 +136,7 @@
     <h4>Export</h4>
     <div class="inline">
       <button class="btn sm" id="export-txt">Download .txt tab</button>
+      <button class="btn sm" id="export-midi" title="Standard MIDI file: opens in DAWs, MuseScore, Guitar Pro…">Download MIDI</button>
       <button class="btn sm" id="copy-txt">Copy tab</button>
     </div>
     <p class="muted small" id="tuning-info"></p>
@@ -179,6 +180,7 @@
     <div id="mixer-tracks"></div>
     <p id="mixer-empty" class="muted small">No audio tracks.</p>
     <div class="mix-row extra"><span class="mix-name">Tab synth</span>
+      <select id="synth-preset" class="synth-preset" title="Tab synth sound (choosing one plays a preview)" aria-label="Tab synth sound"></select>
       <input type="range" id="vol-synth" min="0" max="1" step="0.01" value="0" aria-label="Tab synth volume"></div>
     <div class="mix-row extra"><span class="mix-name">Metronome</span>
       <input type="range" id="vol-metro" min="0" max="1" step="0.01" value="0.6" aria-label="Metronome volume"></div>

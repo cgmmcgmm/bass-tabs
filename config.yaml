@@ -25,6 +25,7 @@ playback:
   metronome: false
   metronome_volume: 0.6     # 0..1
   tab_synth_volume: 0       # 0..1  synthesized tab playback (0 = off)
+  synth_preset: finger      # finger | pick | slap | synth | muted | sub
   slide_time_ms: 60         # how long the tab synth takes to glide into a slid/legato note
 
 mixer:

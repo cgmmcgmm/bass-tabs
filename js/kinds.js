@@ -33,22 +33,38 @@ export const KINDS = {
   },
 };
 
-const RULES = [
-  ['bass', /bass|\bbs\b/i],
-  ['drums', /drum|\bkit\b|perc|kick|snare|cymbal|hi-?hat/i],
-  ['vocals', /vocal|\bvox\b|voice|\bvo\b|sing|choir|\bbv\b|backing/i],
-  ['guitar', /guitar|gtr|\bgit\b/i],
-  ['keys', /piano|keys|keyboard|organ|synth|rhodes/i],
-  ['other', /\bother\b|\brest\b|\binst/i],
-  ['mix', /\bmix\b|master|full|original/i],
-];
+// Default auto-label keywords (overridable in config.yaml -> auto_labels).
+// First matching kind wins, top to bottom. A keyword matches at the start of a word,
+// so "drum" matches "Drums" and "gtr" matches "Gtr2".
+export const DEFAULT_AUTO_LABELS = {
+  other: 'other',
+  bass: 'bass',
+  drums: 'drum, kit, perc, kick, snare, cymbal, hihat, hi-hat',
+  vocals: 'vocal, vox, voice, sing, choir, backing',
+  guitar: 'guitar, gtr',
+  keys: 'piano, keys, keyboard, organ, synth, rhodes',
+  mix: 'mix, master, full, original',
+};
 
-/** Guess a kind from a file name. Stems from Demucs end in "- bass", "- drums", ... */
+let RULES = [];
+export function setAutoLabels(map) {
+  RULES = Object.entries(map || DEFAULT_AUTO_LABELS)
+    .filter(([k]) => KINDS[k])
+    .map(([k, words]) => {
+      const list = String(words).split(',').map((w) => w.trim().toLowerCase()).filter(Boolean)
+        .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      return [k, list.length ? new RegExp(`(^|[^a-z0-9])(${list.join('|')})`, 'i') : null];
+    })
+    .filter(([, re]) => re);
+}
+setAutoLabels(DEFAULT_AUTO_LABELS);
+
+/** Guess a kind from a file name. Stems from Demucs/Moises end in "- bass", "- other", ... */
 export function detectKind(fileName) {
   const base = fileName.replace(/\.[^.]+$/, '');
-  const tail = base.split(/\s+-\s+/).pop(); // "Song - bass" -> "bass" (Demucs naming)
+  const tail = base.split(/\s+-\s+/).pop(); // "Song - bass" -> "bass"
   for (const part of [tail, base]) {
-    const n = part.replace(/[_\-.]+/g, ' ');
+    const n = part.replace(/[_.]+/g, ' ');
     for (const [k, re] of RULES) if (re.test(n)) return k;
   }
   return null;

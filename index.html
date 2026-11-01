@@ -46,7 +46,7 @@
       <div class="song-head">
         <h2><span id="song-title">Untitled</span> <span class="muted">Bass Tab</span></h2>
         <div class="song-sub" id="song-sub"></div>
-        <div class="hint">Click to move the cursor · drag to set a loop (or use In / Out) · click a note to edit it</div>
+        <div class="hint">Click to move the cursor · <span id="hint-drag">drag to set a loop (or use In / Out)</span> · click a note to edit it</div>
       </div>
       <div id="tab-host" class="tab-host"></div>
     </section>
@@ -91,6 +91,10 @@
       <select id="grid"><option value="4">16th notes</option><option value="2">8th notes</option></select>
     </label>
     <button class="btn sm" id="tempo-auto">Re-detect tempo</button>
+
+    <h4>Playback</h4>
+    <label class="check"><input type="checkbox" id="drag-loop"> Drag on the tab to set a loop
+      <span class="muted small">Turn off on touch screens so dragging scrolls the page. In / Out always work.</span></label>
 
     <h4>Note detection <span class="muted small">(re-runs and resets edits)</span></h4>
     <div class="field">

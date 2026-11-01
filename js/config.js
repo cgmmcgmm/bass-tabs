@@ -5,11 +5,12 @@ export const DEFAULTS = {
   rhythm: { grid: 8, beats_per_bar: 4 },
   detection: { onset_sensitivity: 0.55, min_note_ms: 60, pitch_confidence: 0.7, noise_gate_db: -34 },
   playback: {
-    speed_step_percent: 5, min_speed_percent: 25, max_speed_percent: 150, count_in: false, metronome: false,
+    drag_to_loop: 'auto', speed_step_percent: 5, min_speed_percent: 25, max_speed_percent: 150, count_in: false, metronome: false,
     metronome_volume: 0.6, tab_synth_volume: 0, slide_time_ms: 60,
   },
   mixer: { tab_track_match: 'bass' },
   helper: { url: '' },
+  auto_labels: null, // null = built-in keywords (js/kinds.js)
 };
 
 function parseValue(v) {
@@ -51,7 +52,9 @@ export async function loadConfig() {
     if (r.ok) {
       const user = parseYaml(await r.text());
       for (const [sec, vals] of Object.entries(user)) {
-        if (cfg[sec] && typeof vals === 'object') Object.assign(cfg[sec], vals);
+        if (typeof vals !== 'object') continue;
+        if (sec === 'auto_labels') cfg.auto_labels = vals; // replaced as a whole: order = priority
+        else if (cfg[sec]) Object.assign(cfg[sec], vals);
       }
     }
   } catch (e) { console.warn('config.yaml not loaded, using defaults', e); }

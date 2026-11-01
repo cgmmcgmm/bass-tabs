@@ -28,6 +28,11 @@ Then upload `bass.wav` into the app.
 
 ## Other ideas
 
+- **Live input:** play along through an audio interface or mic. The input is monitored and mixed with the tracks, and there's a latency setting.
+- **Record the live input** while the song plays, in sync with the tab and loop.
+- **Use a recording:** add the take as a track, or upload a new recording, then compare it against the tab (or transcribe it).
+- **Synth sounds:** 3–5 presets for the tab synth (e.g. finger, pick, slap/bright, sub/synth bass, muted).
+
 - MIDI and Guitar Pro (.gp) export.
 - Detecting hammer-ons and pull-offs versus slides, and ghost or dead notes (X).
 - Tempo changes within a song (a beat-tracking curve instead of one fixed BPM).

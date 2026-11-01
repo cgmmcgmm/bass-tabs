@@ -46,8 +46,15 @@ body {
 .btn.danger { color: #d33; }
 .btn.on { background: var(--accent-2); color: #fff; border-color: var(--accent-2); }
 
-main { max-width: 1400px; margin: 0 auto; padding: 0 16px; transition: margin .2s; }
-@media (min-width: 900px) { body.drawer-open main { margin-right: min(360px, 100%); } }
+main { max-width: 1400px; margin: 0 auto; padding: 0 16px; }
+/* Settings drawer open: keep the tab where it is if it fits, otherwise move it left / narrow it. Never move it right. */
+@media (min-width: 900px) {
+  body.drawer-open main {
+    --ml: max(0px, min(calc((100vw - 1400px) / 2), calc(100vw - 360px - 1400px)));
+    margin-left: var(--ml); margin-right: 0;
+    max-width: min(1400px, calc(100vw - 360px - var(--ml)));
+  }
+}
 .empty { display: grid; place-items: center; min-height: 70vh; }
 .drop {
   text-align: center; border: 2px dashed var(--border); border-radius: 16px; padding: 48px 32px; max-width: 640px;
@@ -68,6 +75,7 @@ main { max-width: 1400px; margin: 0 auto; padding: 0 16px; transition: margin .2
 .song-sub { color: var(--muted); margin-top: 4px; }
 .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
 .tab-host { margin-top: 10px; user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+.tab-host.drag-loop { touch-action: none; }
 .tab-svg { display: block; cursor: text; }
 
 .str-line { stroke: var(--line); stroke-width: 1; }
@@ -173,7 +181,7 @@ main { max-width: 1400px; margin: 0 auto; padding: 0 16px; transition: margin .2
   font-size: 12.5px; line-height: 1.45; color: var(--text); }
 
 .mixer {
-  position: fixed; z-index: 36; right: 16px; bottom: 96px; width: min(460px, calc(100% - 32px)); max-height: 60vh; overflow: auto;
+  position: fixed; z-index: 36; left: 16px; bottom: 96px; width: min(460px, calc(100% - 32px)); max-height: 60vh; overflow: auto;
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 12px 14px;
 }
 .mix-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); }
@@ -192,7 +200,7 @@ main { max-width: 1400px; margin: 0 auto; padding: 0 16px; transition: margin .2
 .toast { position: fixed; z-index: 50; left: 50%; transform: translateX(-50%); top: 64px; background: var(--text); color: var(--bg);
   padding: 9px 14px; border-radius: 9px; box-shadow: var(--shadow); font-size: 13px; max-width: calc(100% - 32px); }
 @media (max-width: 700px) {
-  .mixer { right: 16px; bottom: 160px; }
+  .mixer { left: 16px; bottom: 160px; }
   .mix-row input[type=range] { width: 80px; }
   .wide-only-btn { display: none; }
 }
@@ -232,3 +240,7 @@ kbd { display: inline-block; min-width: 22px; text-align: center; padding: 2px 6
   padding: 5px 8px; border-radius: 7px; cursor: pointer; text-align: left; }
 .kind-menu button:hover, .kind-menu button.on { background: var(--btn-h); }
 .kind-menu .ticon { width: 26px; height: 26px; }
+
+.drawer label.check { display: block; font-weight: 600; }
+.drawer label.check input { margin-right: 6px; }
+.drawer label.check .small { display: block; font-weight: 400; margin-top: 2px; }

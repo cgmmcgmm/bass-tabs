@@ -17,6 +17,7 @@ detection:
   noise_gate_db: -34        # -60..-10   higher = ignore more quiet sound
 
 playback:
+  drag_to_loop: auto        # auto (on for mouse, off for touch screens) | true | false
   speed_step_percent: 5     # how much - / + (and [ / ]) change the speed
   min_speed_percent: 25
   max_speed_percent: 150
@@ -28,6 +29,19 @@ playback:
 
 mixer:
   tab_track_match: bass     # the track whose file name contains this becomes the TAB track
+
+# Auto-labels: which instrument a track gets from words in its file name.
+# Checked top to bottom, first match wins (so "other" beats "guitar" in "Song - other guitars").
+# Comma-separated; a word matches at the start of a word ("drum" matches "Drums").
+# Kinds: other, bass, drums, vocals, guitar, keys, mix  (each has its own icon)
+auto_labels:
+  other: other
+  bass: bass
+  drums: drum, kit, perc, kick, snare, cymbal, hihat, hi-hat
+  vocals: vocal, vox, voice, sing, choir, backing
+  guitar: guitar, gtr
+  keys: piano, keys, keyboard, organ, synth, rhodes
+  mix: mix, master, full, original
 
 helper:
   url: ""                   # Demucs helper address, e.g. http://localhost:7860 (see helper/README.md)

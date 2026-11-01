@@ -62,7 +62,7 @@ Then open http://localhost:8000. Click **Demo** to try it without a file. It als
 
 ## Settings file
 
-`config.yaml` sets the defaults: tuning, frets, grid (8ths or 16ths), time signature, detection sliders, speed step and limits, metronome, count-in, synth volume, slide glide time, and which track becomes the TAB track. Edit it and reload the page. Keys you remove fall back to the built-in defaults in `js/config.js`.
+`config.yaml` sets the defaults: tuning, frets, grid (8ths or 16ths), time signature, detection sliders, speed step and limits, drag-to-loop, metronome, count-in, synth volume, slide glide time, which track becomes the TAB track, and the auto-label keywords (`auto_labels`). Edit it and reload the page. Keys you remove fall back to the built-in defaults in `js/config.js`.
 
 ## Tips
 

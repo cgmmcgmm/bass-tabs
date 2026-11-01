@@ -3,10 +3,11 @@ import { renderTab, cursorPos, timeAt, rangeRects } from './tab-render.js';
 import { pluck, click, makeDemo, encodeWav } from './synth.js';
 import { Mixer } from './mixer.js';
 import { loadConfig } from './config.js';
-import { KINDS, autoLabel } from './kinds.js';
+import { KINDS, autoLabel, setAutoLabels } from './kinds.js';
 import { helper, connectHelper, setHelperUrl, separate, fetchStem } from './helper.js';
 
 const CONFIG = await loadConfig();
+if (CONFIG.auto_labels) setAutoLabels(CONFIG.auto_labels);
 
 const $ = (id) => document.getElementById(id);
 const mixer = new Mixer();
@@ -729,6 +730,24 @@ const svgPoint = (e) => {
   const r = state.layout.svg.getBoundingClientRect();
   return [e.clientX - r.left, e.clientY - r.top];
 };
+// Drag-to-loop: on by default with a mouse, off on touch screens (so dragging scrolls).
+const LS_DRAG = 'bassTabs.dragToLoop';
+function initDragToLoop() {
+  let v = CONFIG.playback.drag_to_loop;
+  try { const ls = localStorage.getItem(LS_DRAG); if (ls !== null) v = ls === '1'; } catch {}
+  if (v === 'auto' || v === '' || v === undefined) v = !matchMedia('(pointer: coarse)').matches;
+  setDragToLoop(!!v, false);
+}
+function setDragToLoop(on, remember = true) {
+  state.dragToLoop = on;
+  $('drag-loop').checked = on;
+  $('tab-host').classList.toggle('drag-loop', on);
+  $('hint-drag').textContent = on ? 'drag to set a loop (or use In / Out)' : 'use In / Out to set a loop';
+  if (remember) try { localStorage.setItem(LS_DRAG, on ? '1' : '0'); } catch {}
+}
+$('drag-loop').onchange = (e) => setDragToLoop(e.target.checked);
+window.addEventListener('pointercancel', () => { drag = null; }); // browser took over (scrolling)
+
 $('tab-host').addEventListener('pointerdown', (e) => {
   if (!state.layout || e.button !== 0) return;
   const [x, y] = svgPoint(e);
@@ -737,7 +756,7 @@ $('tab-host').addEventListener('pointerdown', (e) => {
   drag = { x0: e.clientX, y0: e.clientY, t0: hit?.t, hit, noteId: noteEl ? +noteEl.dataset.id : null, moved: false };
 });
 window.addEventListener('pointermove', (e) => {
-  if (!drag || drag.t0 == null) return;
+  if (!drag || drag.t0 == null || !state.dragToLoop) return;
   if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
   drag.moved = true;
   const [x, y] = svgPoint(e);
@@ -891,7 +910,7 @@ new MutationObserver(() => {
   const open = !$('settings').hidden;
   if (document.body.classList.contains('drawer-open') === open) return;
   document.body.classList.toggle('drawer-open', open);
-  render();
+  requestAnimationFrame(render);
 }).observe($('settings'), { attributes: true, attributeFilter: ['hidden'] });
 $('settings-close').onclick = () => ($('settings').hidden = true);
 
@@ -939,6 +958,7 @@ window.addEventListener('keydown', (e) => {
 
 applyConfigDefaults();
 applyVolumes();
+initDragToLoop();
 connectHelper(CONFIG.helper.url).then(renderHelperStatus);
 state.metro = !!CONFIG.playback.metronome; $('metro').classList.toggle('on', state.metro);
 state.countIn = !!CONFIG.playback.count_in; $('countin').classList.toggle('on', state.countIn);

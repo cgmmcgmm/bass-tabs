@@ -1,6 +1,8 @@
 # Notes
 
-## Future idea: isolate the bass with Demucs
+## Isolating the bass with Demucs
+
+**Status:** implemented as option 1 below, a local helper (`helper/`). The notes below are kept for reference.
 
 Transcription works best on a solo or DI bass track. On a full mix, the drums, guitars and vocals cause wrong pitches and false note starts. [Demucs](https://github.com/facebookresearch/demucs) (Meta, MIT licence) is a source-separation model that can pull the bass out of a full song. This would let users upload a normal song file.
 

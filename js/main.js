@@ -3,6 +3,7 @@ import { renderTab, cursorPos, timeAt, rangeRects } from './tab-render.js';
 import { pluck, click, makeDemo, encodeWav } from './synth.js';
 import { Mixer } from './mixer.js';
 import { loadConfig } from './config.js';
+import { helper, connectHelper, setHelperUrl, separate, fetchStem } from './helper.js';
 
 const CONFIG = await loadConfig();
 
@@ -150,7 +151,7 @@ function projectData() {
   const tab = mixer.tracks.find((t) => t.id === state.tabTrack);
   return {
     app: 'bass-tabs', version: 1, savedAt: new Date().toISOString(), title: state.title,
-    tracks: mixer.tracks.map((t) => ({ name: t.name, size: t.size, vol: t.vol, mute: t.mute, solo: t.solo, tab: t.id === state.tabTrack })),
+    tracks: mixer.tracks.map((t) => ({ name: t.name, size: t.size, vol: t.vol, mute: t.mute, solo: t.solo, tab: t.id === state.tabTrack, ...(t.remote ? { remote: t.remote } : {}) })),
     tabTrack: tab?.name || null,
     settings: Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])),
     tuningManual: $('tuning').dataset.auto === 'no',
@@ -191,7 +192,8 @@ async function loadProject(proj, files, fallbackTitle) {
   let missing = wanted.filter((w) => !w.f).map((w) => w.t.name);
   if (missing.length) {
     showView(state.song ? 'song' : 'empty');
-    const extra = await askForMissing(missing);
+    const remotes = Object.fromEntries(proj.tracks.filter((t) => t.remote).map((t) => [t.name, t.remote]));
+    const extra = await askForMissing(missing, remotes);
     for (const f of extra) {
       const w = wanted.find((x) => !x.f && x.t.name.toLowerCase() === f.name.toLowerCase());
       if (w) w.f = f;
@@ -201,7 +203,7 @@ async function loadProject(proj, files, fallbackTitle) {
   }
   const loaded = await decodeAll(wanted.filter((w) => w.f).map((w) => w.f), (f) => {
     const t = proj.tracks.find((x) => x.name.toLowerCase() === f.name.toLowerCase());
-    return { vol: t.vol, mute: t.mute, solo: t.solo };
+    return { vol: t.vol, mute: t.mute, solo: t.solo, remote: t.remote };
   });
   for (const [id, v] of Object.entries(proj.settings || {})) if ($(id)) { $(id).value = v; $(id).dispatchEvent(new Event('input')); }
   $('tuning').dataset.auto = proj.tuningManual ? 'no' : '';
@@ -226,12 +228,24 @@ async function loadProject(proj, files, fallbackTitle) {
 }
 
 /** Ask the user to locate a project's audio files. Resolves to File[] (possibly empty). */
-function askForMissing(names) {
+function askForMissing(names, remotes = {}) {
   const dlg = $('missing');
   $('missing-list').innerHTML = names.map((n) => `<li>${n.replace(/</g, '&lt;')}</li>`).join('');
   $('missing-folder').hidden = !window.showDirectoryPicker;
+  const fromHelper = names.filter((n) => remotes[n]);
+  $('missing-helper').hidden = !(helper.url && fromHelper.length);
   return new Promise((resolve) => {
     const done = (files) => { dlg.close(); resolve(files); };
+    $('missing-helper').onclick = async () => {
+      $('missing-helper').textContent = 'Fetching…';
+      const files = [];
+      for (const n of fromHelper) {
+        try { const r = await fetchStem(remotes[n]); files.push(new File([r.file], n, { type: 'audio/wav' })); }
+        catch (e) { console.warn(e); }
+      }
+      $('missing-helper').textContent = 'Get stems from the helper';
+      done(files);
+    };
     $('missing-files').onchange = (e) => { const f = [...e.target.files]; e.target.value = ''; done(f); };
     $('missing-folder').onclick = async () => {
       try {
@@ -246,6 +260,81 @@ function askForMissing(names) {
     dlg.oncancel = () => resolve([]);
     dlg.showModal();
   });
+}
+
+/* ---------- stem separation (PC helper) ---------- */
+function renderHelperStatus() {
+  const st = $('helper-status');
+  if (helper.url) {
+    st.textContent = `Connected: ${helper.url} (${helper.info.device === 'cuda' ? 'GPU' : 'CPU'})`;
+    st.className = 'small ok';
+  } else {
+    st.textContent = 'Not connected. Start the helper on your PC (helper/start.bat) and open the app from it, or enter its address.';
+    st.className = 'small muted';
+  }
+  $('helper-url').value = helper.url || CONFIG.helper.url || '';
+  renderMixer();
+}
+$('helper-connect').onclick = async () => {
+  $('helper-status').textContent = 'Connecting…';
+  await setHelperUrl($('helper-url').value);
+  renderHelperStatus();
+  if (!helper.url) $('helper-status').textContent = "Couldn't reach a helper at that address.";
+};
+
+let splitAbort = null;
+function openSplit(track) {
+  const dlg = $('split');
+  $('split-name').textContent = track.name;
+  const sel = $('split-model');
+  sel.innerHTML = Object.entries(helper.info.models).map(([k, v]) => `<option value="${k}">${k} — ${v}</option>`).join('');
+  $('split-progress').hidden = true; $('split-msg').textContent = '';
+  $('split-start').disabled = false;
+  $('split-start').onclick = () => runSplit(track, sel.value);
+  $('split-cancel').onclick = () => { splitAbort?.abort(); dlg.close(); };
+  dlg.showModal();
+}
+
+async function runSplit(track, model) {
+  const fill = $('split-fill'), msg = $('split-msg');
+  $('split-progress').hidden = false; $('split-start').disabled = true;
+  splitAbort = new AbortController();
+  const phases = { upload: [0, 0.1], separate: [0.1, 0.9], download: [0.9, 1] };
+  try {
+    msg.textContent = 'Preparing audio…';
+    let wav = track.file;
+    if (!/\.wav$/i.test(track.name)) {
+      const buf = await ctx.decodeAudioData(await track.file.arrayBuffer());
+      wav = encodeWav([...Array(buf.numberOfChannels).keys()].map((c) => buf.getChannelData(c)), buf.sampleRate);
+    }
+    const stems = await separate(wav, track.name, model, ({ phase, progress, message }) => {
+      const [a, b] = phases[phase];
+      fill.style.width = Math.round((a + (b - a) * (progress || 0)) * 100) + '%';
+      msg.textContent = message || '';
+    }, splitAbort.signal);
+    msg.textContent = 'Adding stems…';
+    const base = baseName(track.name);
+    const added = [];
+    for (const s of stems) {
+      const name = `${base} - ${s.name}`;
+      const { track: nt } = await mixer.addFile(new File([s.file], name, { type: 'audio/wav' }), { remote: s.remote });
+      added.push(nt);
+    }
+    mixer.update(track.id, { mute: true });
+    $('split').close();
+    const bass = added.find((t) => /- bass\.wav$/i.test(t.name));
+    if (bass && state.tabTrack === track.id) {
+      state.title = base;
+      await transcribeTrack(bass.id, null, { tempo: true, tuning: true });
+      toast(`Added ${added.length} stems. The tab is now made from the bass stem; the original is muted.`);
+    } else toast(`Added ${added.length} stems; the original track is muted.`);
+    renderMixer();
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    console.error(e);
+    msg.textContent = 'Error: ' + e.message;
+    $('split-start').disabled = false;
+  }
 }
 
 /* ---------- mixer panel ---------- */
@@ -266,7 +355,9 @@ function renderMixer() {
       <button class="ms ${t.mute ? 'on' : ''}" data-k="mute" title="Mute">M</button>
       <button class="ms solo ${t.solo ? 'on' : ''}" data-k="solo" title="Solo">S</button>
       <input type="range" min="0" max="1" step="0.01" value="${t.vol}" aria-label="Volume of ${t.name.replace(/"/g, '&quot;')}">
+      ${helper.url ? '<button class="ms split" title="Split into stems with Demucs">✂</button>' : ''}
       <button class="x rm" title="Remove track" aria-label="Remove track">×</button>`;
+    row.querySelector('.split')?.addEventListener('click', () => openSplit(t));
     row.querySelector('input[type=range]').oninput = (e) => mixer.update(t.id, { vol: +e.target.value });
     row.querySelectorAll('.ms').forEach((b) => (b.onclick = () => {
       mixer.update(t.id, { [b.dataset.k]: !t[b.dataset.k] }); b.classList.toggle('on', t[b.dataset.k]);
@@ -807,6 +898,7 @@ window.addEventListener('keydown', (e) => {
 
 applyConfigDefaults();
 applyVolumes();
+connectHelper(CONFIG.helper.url).then(renderHelperStatus);
 state.metro = !!CONFIG.playback.metronome; $('metro').classList.toggle('on', state.metro);
 state.countIn = !!CONFIG.playback.count_in; $('countin').classList.toggle('on', state.countIn);
 setSpeed(1);

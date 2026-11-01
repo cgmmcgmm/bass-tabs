@@ -119,6 +119,15 @@
     </div>
     <p class="muted small">Note split in two? Lower <b>Onset sensitivity</b> first. You can also select the second half and press <b>Merge with previous</b> (key J).</p>
 
+    <h4>Stem helper (Demucs)</h4>
+    <p id="helper-status" class="small muted">Checking…</p>
+    <label>Helper address
+      <span class="inline"><input type="text" id="helper-url" placeholder="http://localhost:7860" style="flex:1;min-width:0">
+        <button class="btn sm" id="helper-connect">Connect</button></span>
+    </label>
+    <p class="muted small">When connected, each track in the Mixer gets a ✂ button that splits it into stems
+      (drums, bass, other, vocals…). See <code>helper/README.md</code>.</p>
+
     <h4>Export</h4>
     <div class="inline">
       <button class="btn sm" id="export-txt">Download .txt tab</button>
@@ -176,8 +185,25 @@
     <ul id="missing-list"></ul>
     <div class="inline">
       <label class="btn primary sm"><input type="file" id="missing-files" multiple hidden>Choose files…</label>
+      <button class="btn sm" id="missing-helper" hidden>Get stems from the helper</button>
       <button class="btn sm" id="missing-folder" hidden title="Only the files listed above are loaded">Look in a folder…</button>
       <button class="btn sm" id="missing-skip">Skip</button>
+    </div>
+  </dialog>
+
+  <dialog id="split" class="dlg">
+    <h3>Split into stems</h3>
+    <p><b id="split-name"></b></p>
+    <label class="small">Model <select id="split-model"></select></label>
+    <div id="split-progress" hidden>
+      <div class="progress-bar"><div id="split-fill" style="width:0"></div></div>
+    </div>
+    <p id="split-msg" class="small muted"></p>
+    <p class="small muted">Runs on your PC. First run downloads the model (~80 MB). A 4-minute song takes roughly
+      20 s on a GPU, several minutes on a CPU.</p>
+    <div class="inline">
+      <button class="btn primary sm" id="split-start">Separate</button>
+      <button class="btn sm" id="split-cancel">Close</button>
     </div>
   </dialog>
 

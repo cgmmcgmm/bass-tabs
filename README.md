@@ -56,6 +56,10 @@ Then open http://localhost:8000. Click **Demo** to try it without a file. It als
 | Del | Delete the selected note |
 | ? | Show all shortcuts |
 
+## Stem separation (optional PC helper)
+
+`helper/` contains a small Windows helper that runs Demucs on your PC and serves the app. Run `install.bat` once, then `start.bat`. Each track in the Mixer gets a ✂ button that splits it into drums/bass/other/vocals. See [helper/README.md](helper/README.md), including how to use it from your phone with Tailscale.
+
 ## Settings file
 
 `config.yaml` sets the defaults: tuning, frets, grid (8ths or 16ths), time signature, detection sliders, speed step and limits, metronome, count-in, synth volume, slide glide time, and which track becomes the TAB track. Edit it and reload the page. Keys you remove fall back to the built-in defaults in `js/config.js`.

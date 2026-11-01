@@ -1,0 +1,4 @@
+# torch / torchaudio are installed by install.bat (CUDA or CPU build)
+demucs==4.0.1
+soundfile>=0.12
+numpy<2

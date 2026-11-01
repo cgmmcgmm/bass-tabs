@@ -72,7 +72,9 @@ const AUDIO_RE = /\.(wav|wave|mp3|m4a|aac|mp4|ogg|oga|opus|flac|aif|aiff|caf|web
 const PROJECT_RE = /\.(basstab|json)$/i;
 const baseName = (n) => n.replace(/\.[^.]+$/, '');
 // "My Song - bass.wav" -> "My Song"
-const songTitle = (n) => baseName(n).replace(/\s+-\s+(bass|drums|vocals|other|guitar|piano)$/i, '') || baseName(n);
+const songTitle = (n) => baseName(n)
+  .replace(/\s*-\s*(bass|drums|vocals|other|guitar|piano|keys|metronome)(-.*)?$/i, '') // "Song - bass", Moises "Song-bass-D minor-119bpm-440hz"
+  .trim() || baseName(n);
 const guessBass = (tracks) => {
   const key = String(CONFIG.mixer.tab_track_match || 'bass').toLowerCase();
   return tracks.find((t) => t.name.toLowerCase().includes(key)) || tracks[0];
@@ -454,8 +456,18 @@ function retranscribe(detectTempo, pickTuning) {
   if (detectTempo) autoTempo();
   rearrange();
 }
+// "...-119bpm-..." (Moises) or "120 BPM" in a track's file name
+function bpmFromNames() {
+  for (const t of mixer.tracks) {
+    const m = t.name.match(/(?:^|[^0-9.])(\d{2,3}(?:\.\d+)?)\s*bpm(?![a-z])/i);
+    if (m && +m[1] >= 40 && +m[1] <= 250) return +m[1];
+  }
+  return 0;
+}
 function autoTempo() {
-  const { bpm, offset } = estimateTempo(state.feat, state.seg.notes, +$('beats').value);
+  const hint = bpmFromNames();
+  const { bpm, offset } = estimateTempo(state.feat, state.seg.notes, +$('beats').value, hint);
+  if (hint) toast(`Tempo ${hint} BPM taken from the file name.`);
   $('bpm').value = bpm; $('offset').value = offset;
 }
 function rearrange() {

@@ -251,7 +251,8 @@ export function segmentNotes(feat, opts) {
 }
 
 /** Estimate BPM + first downbeat offset (seconds). */
-export function estimateTempo(feat, notes, beatsPerBar = 4) {
+/** fixedBpm: known tempo (e.g. from the file name) - only the bar positions are estimated. */
+export function estimateTempo(feat, notes, beatsPerBar = 4, fixedBpm = 0) {
   const { flux, hopTime } = feat;
   if (!notes.length) return { bpm: 120, offset: 0 };
   const env = onsetEnvelope(flux);
@@ -302,7 +303,7 @@ export function estimateTempo(feat, notes, beatsPerBar = 4) {
     if (R > rBest) { rBest = R; refined = bpm; }
   }
   const rounded = Math.round(refined);
-  const bpm = coherence(rounded, 4).R >= 0.95 * rBest ? rounded : Math.round(refined * 10) / 10;
+  const bpm = fixedBpm > 0 ? fixedBpm : coherence(rounded, 4).R >= 0.95 * rBest ? rounded : Math.round(refined * 10) / 10;
 
   // Beat phase: pick the 16th phase that puts the most weight on beats.
   const P16 = 60 / bpm / 4, P = 60 / bpm;

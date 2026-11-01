@@ -35,6 +35,10 @@ export const KINDS = {
     label: 'Unknown', color: '#95a5a6',
     icon: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1 1-1.1 1.8v.5"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>'),
   },
+  click: {
+    label: 'Click', color: '#c0392b',
+    icon: svg('<path d="M8 21h8l-2.5-16h-3z"/><path d="M12 15l5-9"/><path d="M6.5 21h11"/>'),
+  },
   mix: {
     label: 'Full mix', color: '#34495e',
     icon: svg('<path d="M3 12h1M6 8v8M9 5v14M12 9v6M15 6v12M18 9v6M21 12h0"/>'),
@@ -42,14 +46,16 @@ export const KINDS = {
 };
 
 // Default auto-label keywords (overridable in config.yaml -> auto_labels).
-// First matching kind wins, top to bottom. A keyword matches at the start of a word,
-// so "drum" matches "Drums" and "gtr" matches "Gtr2".
+// First matching kind wins, top to bottom. A keyword matches a whole word, optionally
+// followed by "s" or digits ("drum" matches "Drums", "gtr" matches "Gtr2", but "sing"
+// doesn't match "Single"). End a keyword with * to match any word starting with it.
 export const DEFAULT_AUTO_LABELS = {
   other: 'other',
   bass: 'bass',
-  drums: 'drum, kit, perc, kick, snare, cymbal, hihat, hi-hat',
+  click: 'metronome, click, clicktrack',
+  drums: 'drum, kit, perc*, kick, snare, cymbal, hihat, hi-hat',
   backing: 'backing, playalong, play-along, minus',
-  vocals: 'vocal, vox, voice, sing, choir',
+  vocals: 'vocal, vox, voice, singer, singing, choir',
   guitar: 'guitar, gtr',
   keys: 'piano, keys, keyboard, organ, synth, rhodes',
   mix: 'mix, master, full, original',
@@ -61,8 +67,12 @@ export function setAutoLabels(map) {
     .filter(([k]) => KINDS[k])
     .map(([k, words]) => {
       const list = String(words).split(',').map((w) => w.trim().toLowerCase()).filter(Boolean)
-        .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-      return [k, list.length ? new RegExp(`(^|[^a-z0-9])(${list.join('|')})`, 'i') : null];
+        .map((w) => {
+          const prefix = w.endsWith('*');
+          const e = (prefix ? w.slice(0, -1) : w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          return prefix ? `${e}[a-z0-9]*` : `${e}(?:e?s)?\\d*`;
+        });
+      return [k, list.length ? new RegExp(`(?:^|[^a-z0-9])(?:${list.join('|')})(?![a-z])`, 'i') : null];
     })
     .filter(([, re]) => re);
 }

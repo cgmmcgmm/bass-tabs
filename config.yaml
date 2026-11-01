@@ -33,14 +33,17 @@ mixer:
 
 # Auto-labels: which instrument a track gets from words in its file name.
 # Checked top to bottom, first match wins (so "other" beats "guitar" in "Song - other guitars").
-# Comma-separated; a word matches at the start of a word ("drum" matches "Drums").
-# Kinds: other, bass, drums, vocals, guitar, keys, backing, mix  (each has its own icon)
+# Comma-separated whole words; a trailing "s" or number is allowed ("drum" matches "Drums",
+# "gtr" matches "Gtr2", but "sing" would NOT match "Single"). End a word with * to match
+# anything starting with it ("perc*" matches "Percussion").
+# Kinds: other, bass, click, drums, vocals, guitar, keys, backing, mix  (each has its own icon)
 auto_labels:
   other: other
   bass: bass
-  drums: drum, kit, perc, kick, snare, cymbal, hihat, hi-hat
+  click: metronome, click, clicktrack
+  drums: drum, kit, perc*, kick, snare, cymbal, hihat, hi-hat
   backing: backing, playalong, play-along, minus
-  vocals: vocal, vox, voice, sing, choir
+  vocals: vocal, vox, voice, singer, singing, choir
   guitar: guitar, gtr
   keys: piano, keys, keyboard, organ, synth, rhodes
   mix: mix, master, full, original

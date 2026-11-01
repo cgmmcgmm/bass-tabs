@@ -1,5 +1,5 @@
 import { TUNINGS, segmentNotes, estimateTempo, arrange, positionsFor, noteName, toAsciiTab } from './transcribe.js';
-import { renderTab, cursorPos, timeAt } from './tab-render.js';
+import { renderTab, cursorPos, timeAt, rangeRects } from './tab-render.js';
 import { pluck, click, makeDemo, encodeWav } from './synth.js';
 
 const $ = (id) => document.getElementById(id);
@@ -156,8 +156,16 @@ $('vol-synth').addEventListener('input', applyVolumes);
 /* ---------- transport ---------- */
 const loopRange = () => {
   if (!state.loop || !state.song) return null;
-  const b = state.song.bars;
-  return [b[state.loop[0]].start, b[state.loop[1]].end];
+  return [state.loop.a, state.loop.b];
+};
+// snap a time to the nearest grid slot (16th / 8th)
+const snap = (t) => {
+  const { offset, slotDur } = state.song;
+  return offset + Math.round((t - offset) / slotDur) * slotDur;
+};
+const barAt = (t) => {
+  const bars = state.song.bars;
+  return bars.find((b) => t >= b.start - 1e-6 && t < b.end) || (t < bars[0].start ? bars[0] : bars[bars.length - 1]);
 };
 
 async function play() {
@@ -287,20 +295,60 @@ function updateTime() {
 
 /* ---------- loop selection & clicks ---------- */
 function applyLoopHighlight() {
-  if (!state.layout) return;
-  state.layout.bars.forEach((b) => b.bgEl.classList.toggle('in-loop',
-    !!state.loop && b.index >= state.loop[0] && b.index <= state.loop[1]));
   $('loop').classList.toggle('on', state.loopOn);
+  const lr = state.loop ? loopRange() : null;
+  const fmtT = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+  $('loop-range').textContent = lr ? `${fmtT(Math.max(0, lr[0]))} – ${fmtT(lr[1])}` : '';
+  const L = state.layout;
+  if (!L) return;
+  L.loopLayer.innerHTML = '';
+  if (!lr) return;
+  for (const r of rangeRects(L, state.song, lr[0], lr[1])) {
+    const e = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    for (const k in r) e.setAttribute(k, r[k]);
+    e.setAttribute('class', 'loop-rect');
+    L.loopLayer.appendChild(e);
+  }
+  const edge = (t, cls) => {
+    const p = cursorPos(L, state.song, t - 1e-6) || cursorPos(L, state.song, t);
+    if (!p) return;
+    const e = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    Object.entries({ x: p.x - 1, y: p.y - 22, width: 2, height: L.staffH + 22 + 36, class: 'loop-edge ' + cls })
+      .forEach(([k, v]) => e.setAttribute(k, v));
+    L.loopLayer.appendChild(e);
+  };
+  edge(lr[0] + 1e-6, 'in'); edge(lr[1], 'out');
+}
+function setLoop(a, b) {
+  if (!state.song) return;
+  const min = state.song.slotDur;
+  if (b - a < min) b = a + min;
+  state.loop = { a, b };
+  state.loopOn = true;
+  applyLoopHighlight();
+  resetSched();
 }
 function setLoopOn(on) {
   if (on && !state.loop && state.song) {
-    const p = cursorPos(state.layout, state.song, audio.currentTime);
-    const b = p ? p.bar : 0;
-    state.loop = [b, b];
+    const bar = barAt(audio.currentTime);
+    setLoop(bar.start, bar.end);
+    return;
   }
-  state.loopOn = on;
+  state.loopOn = on && !!state.loop;
   if (!on) state.loop = null;
   applyLoopHighlight();
+}
+function setIn() {
+  if (!state.song) return;
+  const a = snap(audio.currentTime);
+  const b = state.loop && state.loop.b > a ? state.loop.b : barAt(a).end;
+  setLoop(a, b);
+}
+function setOut() {
+  if (!state.song) return;
+  const b = snap(audio.currentTime);
+  const a = state.loop && state.loop.a < b ? state.loop.a : barAt(b - 1e-3).start;
+  setLoop(a, b);
 }
 
 let drag = null;
@@ -313,25 +361,21 @@ $('tab-host').addEventListener('pointerdown', (e) => {
   const [x, y] = svgPoint(e);
   const hit = timeAt(state.layout, state.song, x, y);
   const noteEl = e.target.closest('.note');
-  drag = { x0: e.clientX, y0: e.clientY, bar0: hit?.bar, hit, noteId: noteEl ? +noteEl.dataset.id : null, moved: false };
+  drag = { x0: e.clientX, y0: e.clientY, t0: hit?.t, hit, noteId: noteEl ? +noteEl.dataset.id : null, moved: false };
 });
 window.addEventListener('pointermove', (e) => {
-  if (!drag || drag.bar0 == null) return;
+  if (!drag || drag.t0 == null) return;
   if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
   drag.moved = true;
   const [x, y] = svgPoint(e);
   const hit = timeAt(state.layout, state.song, x, y);
-  if (hit) {
-    state.loop = [Math.min(drag.bar0, hit.bar), Math.max(drag.bar0, hit.bar)];
-    state.loopOn = true;
-    applyLoopHighlight();
-  }
+  if (hit) setLoop(snap(Math.min(drag.t0, hit.t)), snap(Math.max(drag.t0, hit.t)));
 });
 window.addEventListener('pointerup', () => {
   if (!drag) return;
   const d = drag; drag = null;
   if (d.moved) {
-    if (state.loop) seek(state.song.bars[state.loop[0]].start);
+    if (state.loop) seek(state.loop.a);
     return;
   }
   if (d.noteId != null) {
@@ -394,6 +438,17 @@ $('insp-del').onclick = () => {
   if (state.selected === id) selectNote(null);
 };
 $('insp-close').onclick = () => selectNote(null);
+function mergePrev() {
+  const vis = state.song.notes.filter((n) => !n.hidden).sort((a, b) => a.qStart - b.qStart);
+  const i = vis.findIndex((n) => n.id === state.selected);
+  if (i < 1) return;
+  const prev = vis[i - 1], cur = vis[i];
+  prev.end = Math.max(prev.end, cur.end);
+  cur.deleted = true;
+  state.selected = prev.id;
+  rearrange();
+}
+$('insp-merge').onclick = mergePrev;
 
 /* ---------- export ---------- */
 function asciiTab() { return state.song ? toAsciiTab(state.song, `${state.title} — Bass Tab`) : ''; }
@@ -438,6 +493,15 @@ $('rewind').onclick = () => seek(state.loopOn && loopRange() ? loopRange()[0] : 
 $('slower').onclick = () => setSpeed(state.speed - 0.05);
 $('faster').onclick = () => setSpeed(state.speed + 0.05);
 $('loop').onclick = () => setLoopOn(!state.loopOn);
+$('loop-in').onclick = setIn;
+$('loop-out').onclick = setOut;
+document.querySelectorAll('.help-btn').forEach((b) => {
+  b.onclick = () => {
+    const h = $(b.dataset.help);
+    h.hidden = !h.hidden;
+    b.setAttribute('aria-expanded', String(!h.hidden));
+  };
+});
 $('metro').onclick = () => { state.metro = !state.metro; $('metro').classList.toggle('on', state.metro); resetSched(); };
 $('countin').onclick = () => { state.countIn = !state.countIn; $('countin').classList.toggle('on', state.countIn); };
 
@@ -465,6 +529,9 @@ window.addEventListener('keydown', (e) => {
   const k = e.key;
   if (k === ' ') { e.preventDefault(); toggle(); }
   else if (k === 'l' || k === 'L') setLoopOn(!state.loopOn);
+  else if (k === 'i' || k === 'I') setIn();
+  else if (k === 'o' || k === 'O') setOut();
+  else if ((k === 'j' || k === 'J') && state.selected != null) mergePrev();
   else if (k === 'm' || k === 'M') $('metro').click();
   else if (k === '[') setSpeed(state.speed - 0.05);
   else if (k === ']') setSpeed(state.speed + 0.05);

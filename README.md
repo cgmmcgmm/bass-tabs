@@ -23,7 +23,7 @@ Then open http://localhost:8000. Click **Demo** to try it without a file. It als
   - Tuning: picked automatically (standard, drop D, Eb, 5-string) from the lowest note.
 - **Tab view**: bars, string names, fret numbers, rhythm stems, beams and rests.
 - **Playback**:
-  - Play/pause, speed 25–150% with pitch preserved, loop by dragging across bars, click to seek.
+  - Play/pause, speed 25–150% with pitch preserved, loop with free in/out points (drag across the tab, or tap In/Out while playing; snapped to the 16th grid), click to seek.
   - Auto-scrolling cursor and highlighting of the note that is playing.
   - Metronome, count-in, and a mix between the original audio and a synthesized tab track.
 - **Editing**: click a note to move it to another string or fret, change its pitch or octave, or delete it.
@@ -35,18 +35,20 @@ Then open http://localhost:8000. Click **Demo** to try it without a file. It als
 | --- | --- |
 | Space | Play / pause |
 | L | Toggle loop |
+| I / O | Set loop in / out point at the cursor |
 | M | Metronome |
 | `[` / `]` | Slower / faster |
 | Home | Back to start (or loop start) |
 | ↑ / ↓ | Move the selected note to another string |
 | + / − | Change the selected note's pitch |
 | ← / → | Previous / next note |
+| J | Merge the selected note into the previous one |
 | Del | Delete the selected note |
 
 ## Tips
 
 - Isolated bass works best: DI tracks, or stems from a source-separation tool such as Demucs. Full mixes will be noisy.
-- If notes are missing or doubled, open ⚙ Settings and adjust **Onset sensitivity**, **Pitch confidence** and the **Noise gate**.
+- If notes are missing or doubled, open ⚙ Settings and adjust **Onset sensitivity**, **Pitch confidence** and the **Noise gate** (tap **?** next to each for an explanation). For a one-off false split, select the second half and use **Merge with previous** (J).
 - If the bar lines are off, adjust the BPM (½× / 2×) or shift the downbeat by a beat.
 
 ## Files

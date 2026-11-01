@@ -34,7 +34,10 @@ function onsetEnvelope(flux) {
 
 function detectOnsets(env, hopTime, sensitivity) {
   const w = Math.round(0.15 / hopTime);
-  const delta = 0.55 - 0.45 * sensitivity;
+  // default (0.55) -> 0.30; 0 -> only very strong attacks; 1 -> very eager
+  const delta = sensitivity >= 0.55
+    ? 0.3 - ((sensitivity - 0.55) / 0.45) * 0.15
+    : 0.3 + ((0.55 - sensitivity) / 0.55) * 0.6;
   const minGap = Math.round(0.075 / hopTime);
   const out = [];
   let last = -Infinity;
@@ -123,10 +126,10 @@ export function segmentNotes(feat, opts) {
   const near = Math.round(0.08 / hopTime);
   const settle = Math.round(0.05 / hopTime);
   const lagMax = 0.15 / hopTime;
-  const minRun = Math.max(2, Math.round(0.045 / hopTime));
+  const minRun = Math.max(2, Math.round(0.07 / hopTime)); // min length of a pitch change without a new attack
   const notes = [];
 
-  const process = (s, e) => {
+  const process = (s, e, fromOnset) => {
     let idx = [];
     for (let j = s + settle; j < e; j++) if (!Number.isNaN(midi[j])) idx.push(j);
     if (idx.length < 2) {
@@ -190,6 +193,8 @@ export function segmentNotes(feat, opts) {
         start, end,
         midi: Math.round(median(r.vals)),
         legato: k > 0,
+        fromOnset: k === 0 && fromOnset,
+        strength: env[s] || 0,
         vel: Math.min(1, vel / ref),
       });
     });
@@ -197,9 +202,45 @@ export function segmentNotes(feat, opts) {
 
   for (const [vs, ve] of regions) {
     const bs = onsets.filter((o) => o > vs - 2 * near && o < ve - minFrames);
-    if (!bs.length || bs[0] > vs + near) bs.unshift(vs);
+    const synthetic = !bs.length || bs[0] > vs + near;
+    if (synthetic) bs.unshift(vs);
     for (let k = 0; k < bs.length; k++) {
-      process(bs[k], k + 1 < bs.length ? bs[k + 1] : ve);
+      process(bs[k], k + 1 < bs.length ? bs[k + 1] : ve, !(synthetic && k === 0));
+    }
+  }
+
+  // Merge false splits: same pitch, (nearly) contiguous, and no real re-attack.
+  // ~60 ms smoothed level (the raw short-window RMS ripples on low notes)
+  const lvl = new Float32Array(n);
+  { const w = Math.max(1, Math.round(0.03 / hopTime));
+    for (let i = 0; i < n; i++) { let m = 0, c = 0; for (let j = Math.max(0, i - w); j <= Math.min(n - 1, i + w); j++) { m += rms[j]; c++; } lvl[i] = m / c; } }
+  const mean = (t0, t1) => {
+    let m = 0, c = 0;
+    for (let j = Math.max(0, Math.round(t0 / hopTime)); j <= Math.min(n - 1, Math.round(t1 / hopTime)); j++) { m += lvl[j]; c++; }
+    return c ? m / c : 0;
+  };
+  // strictness: 0 at default sensitivity and above, 1 at sensitivity 0
+  const strict = Math.min(1, Math.max(0, (0.55 - opts.sensitivity) / 0.55));
+  const riseNeeded = 1.08 + 0.4 * strict;
+  const dipNeeded = 0.95 - 0.25 * strict;
+  const strongNeeded = strict >= 0.95 ? Infinity : 0.8 + 1.2 * strict;
+  const trough = (t0, t1) => {
+    let m = Infinity;
+    for (let j = Math.max(0, Math.round(t0 / hopTime)); j <= Math.min(n - 1, Math.round(t1 / hopTime)); j++) m = Math.min(m, lvl[j]);
+    return m === Infinity ? 0 : m;
+  };
+  for (let k = notes.length - 1; k > 0; k--) {
+    const p = notes[k - 1], c = notes[k];
+    if (p.midi !== c.midi) continue;
+    const gap = c.start - p.end;
+    if (gap > (c.fromOnset ? 0.06 : 0.15)) continue;
+    // A re-pluck leaves the string louder than it was just before; a buzz or click doesn't.
+    const rise = mean(c.start + 0.05, c.start + 0.12) / (mean(c.start - 0.08, c.start - 0.02) + 1e-9);
+    // ...or it is briefly muted as the finger/pick touches it again.
+    const dip = trough(c.start - 0.06, c.start + 0.01) / (mean(c.start - 0.16, c.start - 0.07) + 1e-9);
+    if (!c.fromOnset || (rise < riseNeeded && dip > dipNeeded && c.strength < strongNeeded)) {
+      p.end = c.end;
+      notes.splice(k, 1);
     }
   }
 

@@ -50,12 +50,13 @@ export function renderTab(svgHost, song, opts = {}) {
   const svg = el('svg', { width, height, viewBox: `0 0 ${width} ${height}`, class: 'tab-svg' }, svgHost);
   const layers = {
     bg: el('g', { class: 'layer-bg' }, svg),
+    loop: el('g', { class: 'layer-loop' }, svg),
     staff: el('g', { class: 'layer-staff' }, svg),
     notes: el('g', { class: 'layer-notes' }, svg),
     cursor: el('g', { class: 'layer-cursor' }, svg),
   };
 
-  const layout = { bars: [], rows: [], width, height, rowH, noteEls: new Map(), svg };
+  const layout = { bars: [], rows: [], width, height, rowH, noteEls: new Map(), svg, loopLayer: layers.loop };
 
   rows.forEach((ids, r) => {
     const total = ids.reduce((s, i) => s + barW[i], 0);
@@ -202,4 +203,16 @@ export function timeAt(layout, song, px, py) {
   if (!B) return null;
   const slot = Math.max(0, Math.min(song.spb - 0.001, (px - B.x - G.padL) / B.slotW));
   return { t: song.offset + (B.index * song.spb + slot) * song.slotDur, bar: B.index };
+}
+
+/** Rectangles covering the time range [a, b) across bars/rows. */
+export function rangeRects(layout, song, a, b) {
+  const out = [];
+  for (const B of layout.bars) {
+    if (b <= B.start || a >= B.end) continue;
+    const xa = a <= B.start ? B.x : B.x + G.padL + ((a - B.start) / song.slotDur) * B.slotW;
+    const xb = b >= B.end ? B.x + B.w : B.x + G.padL + ((b - B.start) / song.slotDur) * B.slotW;
+    out.push({ x: xa, y: B.y - 22, width: Math.max(1, xb - xa), height: layout.staffH + 22 + 36 });
+  }
+  return out;
 }

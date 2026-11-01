@@ -42,7 +42,7 @@
       <div class="song-head">
         <h2><span id="song-title">Untitled</span> <span class="muted">Bass Tab</span></h2>
         <div class="song-sub" id="song-sub"></div>
-        <div class="hint">Click to move the cursor · drag across bars to loop · click a note to edit it</div>
+        <div class="hint">Click to move the cursor · drag to set a loop (or use In / Out) · click a note to edit it</div>
       </div>
       <div id="tab-host" class="tab-host"></div>
     </section>
@@ -57,8 +57,10 @@
       <button class="btn sm" id="insp-oct-down">−8va</button>
       <button class="btn sm" id="insp-oct-up">+8va</button>
     </div>
-    <div class="insp-row"><button class="btn sm danger" id="insp-del">Delete note</button>
-      <span class="muted small">Keys: ↑↓ string · +/− pitch · ←→ next note · Del</span></div>
+    <div class="insp-row"><button class="btn sm" id="insp-merge" title="Join this note onto the previous one (J)">Merge with previous</button>
+      <button class="btn sm danger" id="insp-del">Delete note</button></div>
+    <div class="insp-row">
+      <span class="muted small">Keys: ↑↓ string · +/− pitch · ←→ next note · J merge · Del</span></div>
   </div>
 
   <aside id="settings" class="drawer" hidden>
@@ -87,10 +89,31 @@
     <button class="btn sm" id="tempo-auto">Re-detect tempo</button>
 
     <h4>Note detection <span class="muted small">(re-runs and resets edits)</span></h4>
-    <label>Onset sensitivity <input type="range" id="sens" min="0" max="1" step="0.05" value="0.55"><output id="sens-out"></output></label>
-    <label>Min note length (ms) <input type="range" id="min-note" min="20" max="250" step="5" value="60"><output id="min-note-out"></output></label>
-    <label>Pitch confidence <input type="range" id="min-conf" min="0.3" max="0.95" step="0.01" value="0.7"><output id="min-conf-out"></output></label>
-    <label>Noise gate (dB) <input type="range" id="gate" min="-60" max="-10" step="1" value="-34"><output id="gate-out"></output></label>
+    <div class="field">
+      <div class="field-head"><label for="sens">Onset sensitivity</label><output id="sens-out"></output>
+        <button type="button" class="help-btn" data-help="help-sens" aria-expanded="false" aria-label="Help: Onset sensitivity">?</button></div>
+      <input type="range" id="sens" min="0" max="1" step="0.05" value="0.55">
+      <p class="help" id="help-sens" hidden>How easily a new note start (pluck) is detected. <b>Raise</b> it if repeated notes on the same fret merge into one. <b>Lower</b> it if a single note gets split into several (for example from string noise or fret buzz). At 0, only very strong attacks count.</p>
+    </div>
+    <div class="field">
+      <div class="field-head"><label for="min-note">Min note length</label><output id="min-note-out"></output>
+        <button type="button" class="help-btn" data-help="help-min-note" aria-expanded="false" aria-label="Help: Min note length">?</button></div>
+      <input type="range" id="min-note" min="20" max="250" step="5" value="60">
+      <p class="help" id="help-min-note" hidden>Notes shorter than this are thrown away. <b>Raise</b> it to remove short stray blips and ghost notes. <b>Lower</b> it for fast passages, where real 16th notes are going missing.</p>
+    </div>
+    <div class="field">
+      <div class="field-head"><label for="min-conf">Pitch confidence</label><output id="min-conf-out"></output>
+        <button type="button" class="help-btn" data-help="help-min-conf" aria-expanded="false" aria-label="Help: Pitch confidence">?</button></div>
+      <input type="range" id="min-conf" min="0.3" max="0.95" step="0.01" value="0.7">
+      <p class="help" id="help-min-conf" hidden>How clearly pitched the sound must be to count as a note (1 = a perfectly clean tone). <b>Raise</b> it to cut wrong or noisy notes. <b>Lower</b> it if real notes are missing, for example on heavily distorted or effected bass.</p>
+    </div>
+    <div class="field">
+      <div class="field-head"><label for="gate">Noise gate</label><output id="gate-out"></output>
+        <button type="button" class="help-btn" data-help="help-gate" aria-expanded="false" aria-label="Help: Noise gate">?</button></div>
+      <input type="range" id="gate" min="-60" max="-10" step="1" value="-34">
+      <p class="help" id="help-gate" hidden>Sounds quieter than this (relative to the loudest part) are ignored. <b>Raise</b> it (towards −10) for noisy recordings, or to stop notes ringing on too long. <b>Lower</b> it if soft notes disappear.</p>
+    </div>
+    <p class="muted small">Note split in two? Lower <b>Onset sensitivity</b> first. You can also select the second half and press <b>Merge with previous</b> (key J).</p>
 
     <h4>Export</h4>
     <div class="inline">
@@ -113,7 +136,12 @@
       <button class="tbtn sm" id="faster" title="Faster (])">+</button>
     </div>
     <div class="tgroup">
-      <button class="toggle" id="loop" title="Loop selection (L)">⟲ Loop</button>
+      <button class="toggle" id="loop" title="Loop on/off (L)">⟲ Loop</button>
+      <button class="tbtn sm txt" id="loop-in" title="Set loop start at the cursor (I)">In</button>
+      <button class="tbtn sm txt" id="loop-out" title="Set loop end at the cursor (O)">Out</button>
+      <span class="loop-range" id="loop-range"></span>
+    </div>
+    <div class="tgroup">
       <button class="toggle" id="metro" title="Metronome (M)">Metronome</button>
       <button class="toggle" id="countin" title="Count-in before playing">Count-in</button>
     </div>

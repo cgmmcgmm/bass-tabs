@@ -3,6 +3,7 @@ import { renderTab, cursorPos, timeAt, rangeRects } from './tab-render.js';
 import { pluck, click, makeDemo, encodeWav } from './synth.js';
 import { Mixer } from './mixer.js';
 import { loadConfig } from './config.js';
+import { KINDS, autoLabel } from './kinds.js';
 import { helper, connectHelper, setHelperUrl, separate, fetchStem } from './helper.js';
 
 const CONFIG = await loadConfig();
@@ -67,6 +68,8 @@ function setProgress(label, p) {
 const AUDIO_RE = /\.(wav|wave|mp3|m4a|aac|mp4|ogg|oga|opus|flac|aif|aiff|caf|webm)$/i;
 const PROJECT_RE = /\.(basstab|json)$/i;
 const baseName = (n) => n.replace(/\.[^.]+$/, '');
+// "My Song - bass.wav" -> "My Song"
+const songTitle = (n) => baseName(n).replace(/\s+-\s+(bass|drums|vocals|other|guitar|piano)$/i, '') || baseName(n);
 const guessBass = (tracks) => {
   const key = String(CONFIG.mixer.tab_track_match || 'bass').toLowerCase();
   return tracks.find((t) => t.name.toLowerCase().includes(key)) || tracks[0];
@@ -113,7 +116,7 @@ async function newProject(files) {
   const loaded = await decodeAll(files);
   if (!loaded.length) { showView('empty'); return; }
   const tab = guessBass(loaded.map((l) => l.track));
-  state.title = baseName(tab.name);
+  state.title = songTitle(tab.name);
   await transcribeTrack(tab.id, loaded.find((l) => l.track === tab).buffer, { tempo: true, tuning: true });
   renderMixer();
 }
@@ -151,7 +154,7 @@ function projectData() {
   const tab = mixer.tracks.find((t) => t.id === state.tabTrack);
   return {
     app: 'bass-tabs', version: 1, savedAt: new Date().toISOString(), title: state.title,
-    tracks: mixer.tracks.map((t) => ({ name: t.name, size: t.size, vol: t.vol, mute: t.mute, solo: t.solo, tab: t.id === state.tabTrack, ...(t.remote ? { remote: t.remote } : {}) })),
+    tracks: mixer.tracks.map((t) => ({ name: t.name, size: t.size, vol: t.vol, mute: t.mute, solo: t.solo, tab: t.id === state.tabTrack, label: t.label, kind: t.kind, ...(t.remote ? { remote: t.remote } : {}) })),
     tabTrack: tab?.name || null,
     settings: Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])),
     tuningManual: $('tuning').dataset.auto === 'no',
@@ -203,7 +206,7 @@ async function loadProject(proj, files, fallbackTitle) {
   }
   const loaded = await decodeAll(wanted.filter((w) => w.f).map((w) => w.f), (f) => {
     const t = proj.tracks.find((x) => x.name.toLowerCase() === f.name.toLowerCase());
-    return { vol: t.vol, mute: t.mute, solo: t.solo, remote: t.remote };
+    return { vol: t.vol, mute: t.mute, solo: t.solo, remote: t.remote, label: t.label, kind: t.kind };
   });
   for (const [id, v] of Object.entries(proj.settings || {})) if ($(id)) { $(id).value = v; $(id).dispatchEvent(new Event('input')); }
   $('tuning').dataset.auto = proj.tuningManual ? 'no' : '';
@@ -349,27 +352,38 @@ function renderMixer() {
   for (const t of mixer.tracks) {
     const row = document.createElement('div');
     row.className = 'mix-row';
+    autoLabel(t, mixer.tracks.length === 1);
+    const K = KINDS[t.kind] || KINDS.other;
+    const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     row.innerHTML = `
       <label class="tab-src" title="Make the tab from this track"><input type="radio" name="tabsrc" ${t.id === state.tabTrack ? 'checked' : ''}><span>TAB</span></label>
-      <span class="mix-name" title="${t.name.replace(/"/g, '&quot;')}">${t.name.replace(/</g, '&lt;')}</span>
+      <button class="ticon" style="--c:${K.color}" title="Instrument: ${K.label} (click to change)" aria-label="Instrument: ${K.label}">${K.icon}</button>
+      <div class="mix-meta">
+        <input class="mix-label" value="${esc(t.label)}" aria-label="Track label" spellcheck="false">
+        <span class="mix-file" title="${esc(t.name)}">${esc(t.name)}</span>
+      </div>
       <button class="ms ${t.mute ? 'on' : ''}" data-k="mute" title="Mute">M</button>
       <button class="ms solo ${t.solo ? 'on' : ''}" data-k="solo" title="Solo">S</button>
-      <input type="range" min="0" max="1" step="0.01" value="${t.vol}" aria-label="Volume of ${t.name.replace(/"/g, '&quot;')}">
+      <input type="range" min="0" max="1" step="0.01" value="${t.vol}" aria-label="Volume of ${esc(t.label)}">
       ${helper.url ? '<button class="ms split" title="Split into stems with Demucs">✂</button>' : ''}
       <button class="x rm" title="Remove track" aria-label="Remove track">×</button>`;
+    const lab = row.querySelector('.mix-label');
+    lab.onchange = () => { t.label = lab.value.trim() || K.label; lab.value = t.label; };
+    lab.onkeydown = (e) => { if (e.key === 'Enter' || e.key === 'Escape') lab.blur(); };
+    row.querySelector('.ticon').onclick = (e) => openKindMenu(t, e.currentTarget);
     row.querySelector('.split')?.addEventListener('click', () => openSplit(t));
     row.querySelector('input[type=range]').oninput = (e) => mixer.update(t.id, { vol: +e.target.value });
-    row.querySelectorAll('.ms').forEach((b) => (b.onclick = () => {
+    row.querySelectorAll('.ms[data-k]').forEach((b) => (b.onclick = () => {
       mixer.update(t.id, { [b.dataset.k]: !t[b.dataset.k] }); b.classList.toggle('on', t[b.dataset.k]);
     }));
     row.querySelector('.rm').onclick = () => {
-      if (t.id === state.tabTrack && !confirm(`"${t.name}" is the track the tab was made from. Remove it anyway? (The tab stays.)`)) return;
+      if (t.id === state.tabTrack && !confirm(`"${t.label}" is the track the tab was made from. Remove it anyway? (The tab stays.)`)) return;
       mixer.removeTrack(t.id);
       if (t.id === state.tabTrack) state.tabTrack = null;
       renderMixer(); updateTime();
     };
     row.querySelector('input[type=radio]').onchange = async () => {
-      if (!confirm(`Make the tab from "${t.name}"? This re-runs detection and discards note edits.`)) { renderMixer(); return; }
+      if (!confirm(`Make the tab from "${t.label}"? This re-runs detection and discards note edits.`)) { renderMixer(); return; }
       pause();
       state.title = baseName(t.name);
       await transcribeTrack(t.id, null, { tempo: true, tuning: true });
@@ -378,6 +392,26 @@ function renderMixer() {
     list.appendChild(row);
   }
   $('mixer-empty').hidden = mixer.tracks.length > 0;
+}
+
+function openKindMenu(t, anchor) {
+  const m = $('kind-menu');
+  m.innerHTML = Object.entries(KINDS).map(([k, K]) =>
+    `<button data-k="${k}" class="${k === t.kind ? 'on' : ''}"><span class="ticon" style="--c:${K.color}">${K.icon}</span>${K.label}</button>`).join('');
+  const r = anchor.getBoundingClientRect();
+  m.style.left = Math.min(r.left, window.innerWidth - 180) + 'px';
+  m.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  m.hidden = false;
+  m.querySelectorAll('button').forEach((b) => (b.onclick = () => {
+    const old = KINDS[t.kind]?.label;
+    t.kind = b.dataset.k;
+    if (!t.label || t.label === old) t.label = KINDS[t.kind].label; // keep custom labels
+    m.hidden = true;
+    renderMixer();
+  }));
+  setTimeout(() => document.addEventListener('pointerdown', function close(e) {
+    if (!m.contains(e.target)) { m.hidden = true; document.removeEventListener('pointerdown', close); }
+  }), 0);
 }
 
 let toastTimer;
@@ -852,6 +886,13 @@ $('metro').onclick = () => { state.metro = !state.metro; $('metro').classList.to
 $('countin').onclick = () => { state.countIn = !state.countIn; $('countin').classList.toggle('on', state.countIn); };
 
 $('settings-btn').onclick = () => ($('settings').hidden = !$('settings').hidden);
+// Make room for the settings drawer (wide screens) so it doesn't cover the tab.
+new MutationObserver(() => {
+  const open = !$('settings').hidden;
+  if (document.body.classList.contains('drawer-open') === open) return;
+  document.body.classList.toggle('drawer-open', open);
+  render();
+}).observe($('settings'), { attributes: true, attributeFilter: ['hidden'] });
 $('settings-close').onclick = () => ($('settings').hidden = true);
 
 const STEP = (CONFIG.playback.speed_step_percent || 5) / 100;

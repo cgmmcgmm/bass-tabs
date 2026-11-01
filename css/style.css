@@ -46,7 +46,8 @@ body {
 .btn.danger { color: #d33; }
 .btn.on { background: var(--accent-2); color: #fff; border-color: var(--accent-2); }
 
-main { max-width: 1400px; margin: 0 auto; padding: 0 16px; }
+main { max-width: 1400px; margin: 0 auto; padding: 0 16px; transition: margin .2s; }
+@media (min-width: 900px) { body.drawer-open main { margin-right: min(360px, 100%); } }
 .empty { display: grid; place-items: center; min-height: 70vh; }
 .drop {
   text-align: center; border: 2px dashed var(--border); border-radius: 16px; padding: 48px 32px; max-width: 640px;
@@ -216,3 +217,18 @@ kbd { display: inline-block; min-width: 22px; text-align: center; padding: 2px 6
 .drawer input[type=text] { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
 .ok { color: var(--accent); font-weight: 600; }
 .ms.split { font-size: 13px; }
+
+.ticon { flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; padding: 0;
+  border: 0; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); cursor: pointer; }
+.mix-meta { flex: 1; min-width: 0; display: grid; }
+.mix-label { font: 600 14px/1.2 system-ui, sans-serif; color: var(--text); background: transparent; border: 1px solid transparent;
+  border-radius: 5px; padding: 1px 4px; margin-left: -5px; min-width: 0; width: 100%; }
+.mix-label:hover { border-color: var(--border); }
+.mix-label:focus { border-color: var(--accent-2); background: var(--bg); outline: none; }
+.mix-file { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kind-menu { position: fixed; z-index: 60; background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow); padding: 6px; display: grid; min-width: 160px; }
+.kind-menu button { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--text); font: inherit;
+  padding: 5px 8px; border-radius: 7px; cursor: pointer; text-align: left; }
+.kind-menu button:hover, .kind-menu button.on { background: var(--btn-h); }
+.kind-menu .ticon { width: 26px; height: 26px; }

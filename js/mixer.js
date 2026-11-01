@@ -43,6 +43,7 @@ export class Mixer extends EventTarget {
       id: nextId++, name: file.name, size: file.size, file, duration: buffer.duration,
       vol: opts.vol ?? 1, mute: !!opts.mute, solo: !!opts.solo,
       ...(opts.remote ? { remote: opts.remote } : {}),
+      ...(opts.label ? { label: opts.label } : {}), ...(opts.kind ? { kind: opts.kind } : {}),
     };
     this.tracks.push(track);
     this.post({ type: 'add', id: track.id, L, R, gain: 0 }, R ? [L.buffer, R.buffer] : [L.buffer]);

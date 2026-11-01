@@ -1,0 +1,33 @@
+# Bass Tabs settings: the defaults the app starts with.
+# Edit, save, and reload the page. Anything you delete falls back to the built-in default.
+# (On GitHub Pages: edit this file on github.com and commit; the site updates in a minute.)
+
+instrument:
+  tuning: auto          # auto | std4 | drop4 | eb4 | d4 | std5 | std6   (auto = pick from the lowest note)
+  frets: 20             # highest fret on your bass
+
+rhythm:
+  grid: 8               # shortest note the tab snaps to: 8 = 8th notes, 16 = 16th notes
+  beats_per_bar: 4      # 2..7 (x/4 time)
+
+detection:
+  onset_sensitivity: 0.55   # 0..1  higher = more new-note starts detected
+  min_note_ms: 60           # notes shorter than this are dropped
+  pitch_confidence: 0.7     # 0.3..0.95  higher = fewer, cleaner notes
+  noise_gate_db: -34        # -60..-10   higher = ignore more quiet sound
+
+playback:
+  speed_step_percent: 5     # how much - / + (and [ / ]) change the speed
+  min_speed_percent: 25
+  max_speed_percent: 150
+  count_in: false
+  metronome: false
+  metronome_volume: 0.6     # 0..1
+  tab_synth_volume: 0       # 0..1  synthesized tab playback (0 = off)
+  slide_time_ms: 60         # how long the tab synth takes to glide into a slid/legato note
+
+mixer:
+  tab_track_match: bass     # the track whose file name contains this becomes the TAB track
+
+helper:
+  url: ""                   # Demucs helper address, e.g. http://localhost:7860 (see helper/README.md)

@@ -35,7 +35,7 @@ Then open http://localhost:8000. Click **Demo** to try it without a file. It als
   - The speed, loop, metronome and count-in state.
   - All note edits.
 
-  Audio isn't embedded. Keep the project file in the same folder as the audio files. To reopen, choose the `.basstab` together with its audio files (multi-select), or use **Open folder** in Chrome/Edge on desktop. Tracks are matched by file name; any missing ones are listed.
+  Audio isn't embedded. Keep the project file in the same folder as the audio files. To reopen, choose the `.basstab` together with its audio files (multi-select), Tracks are matched by file name. If some are missing, you're asked to locate them: choose the files, or (Chrome/Edge on desktop) **Look in a folder**, which loads only the listed files.
 - **Editing**: click a note to move it to another string or fret, change its pitch or octave, or delete it.
 - **Export**: plain-text tab (.txt), downloaded or copied.
 
@@ -54,6 +54,11 @@ Then open http://localhost:8000. Click **Demo** to try it without a file. It als
 | ← / → | Previous / next note |
 | J | Merge the selected note into the previous one |
 | Del | Delete the selected note |
+| ? | Show all shortcuts |
+
+## Settings file
+
+`config.yaml` sets the defaults: tuning, frets, grid (8ths or 16ths), time signature, detection sliders, speed step and limits, metronome, count-in, synth volume, slide glide time, and which track becomes the TAB track. Edit it and reload the page. Keys you remove fall back to the built-in defaults in `js/config.js`.
 
 ## Tips
 

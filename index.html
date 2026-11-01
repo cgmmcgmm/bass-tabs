@@ -14,9 +14,9 @@
         <input type="file" id="file" multiple hidden>
         Open<span class="wide-only">files</span>
       </label>
-      <button class="btn wide-only-btn" id="open-folder" hidden title="Open a folder with audio files and/or a .basstab project">Open folder</button>
       <button class="btn" id="save" hidden title="Save project (settings, edits, loop, mix)">Save</button>
       <button class="btn" id="demo">Demo</button>
+      <button class="btn icon" id="keys-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">⌨</button>
       <button class="btn icon" id="settings-btn" title="Settings" aria-label="Settings">⚙</button>
     </div>
   </header>
@@ -26,13 +26,12 @@
       <div class="drop" id="drop">
         <div class="drop-icon">🎸</div>
         <h1>Turn a bass recording into tabs</h1>
-        <p>Drop audio files here (WAV, MP3, M4A…) or choose them below. Pick <b>several stems at once</b>
+        <p>Drop audio files here (WAV, MP3, M4A…) or choose them below. Pick <b>several stems at once</b> (Ctrl/⌘ or Shift + click)
           (bass, drums, guitar…) to practise along with the whole song. The tab is made from the track with "bass" in its name.<br>
           To reopen a saved project, choose the <b>.basstab</b> file <b>together with its audio files</b>.<br>
           Everything runs locally in your browser.</p>
         <div class="drop-actions">
           <label class="btn primary big"><input type="file" id="file2" multiple hidden>Choose files</label>
-          <button class="btn big" id="open-folder2" hidden>Open folder</button>
           <button class="btn big" id="demo2">Try a demo riff</button>
         </div>
       </div>
@@ -170,6 +169,41 @@
   </section>
 
   <div id="toast" class="toast" hidden role="status"></div>
+
+  <dialog id="missing" class="dlg">
+    <h3>Find the project's audio</h3>
+    <p>These files weren't selected:</p>
+    <ul id="missing-list"></ul>
+    <div class="inline">
+      <label class="btn primary sm"><input type="file" id="missing-files" multiple hidden>Choose files…</label>
+      <button class="btn sm" id="missing-folder" hidden title="Only the files listed above are loaded">Look in a folder…</button>
+      <button class="btn sm" id="missing-skip">Skip</button>
+    </div>
+  </dialog>
+
+  <section id="keys" class="keys" hidden aria-label="Keyboard shortcuts">
+    <div class="insp-head"><b>Keyboard shortcuts</b><button class="x" id="keys-close" aria-label="Close">×</button></div>
+    <div class="keys-grid">
+      <h5>Playback</h5>
+      <span class="kk"><kbd>Space</kbd></span><span>Play / pause</span>
+      <span class="kk"><kbd>Home</kbd></span><span>Back to start (or loop start)</span>
+      <span class="kk"><kbd>[</kbd> <kbd>]</kbd></span><span>Slower / faster</span>
+      <span class="kk"><kbd>M</kbd></span><span>Metronome on / off</span>
+      <h5>Loop</h5>
+      <span class="kk"><kbd>L</kbd></span><span>Loop on / off</span>
+      <span class="kk"><kbd>I</kbd> <kbd>O</kbd></span><span>Set loop in / out at the cursor</span>
+      <span class="k-mouse">Drag</span><span>Select a loop on the tab</span>
+      <h5>Selected note</h5>
+      <span class="kk"><kbd>←</kbd> <kbd>→</kbd></span><span>Previous / next note</span>
+      <span class="kk"><kbd>↑</kbd> <kbd>↓</kbd></span><span>Move to another string</span>
+      <span class="kk"><kbd>+</kbd> <kbd>−</kbd></span><span>Pitch up / down a semitone</span>
+      <span class="kk"><kbd>J</kbd></span><span>Merge with previous note</span>
+      <span class="kk"><kbd>Del</kbd></span><span>Delete note</span>
+      <h5>General</h5>
+      <span class="kk"><kbd>?</kbd></span><span>Show / hide this list</span>
+      <span class="kk"><kbd>Esc</kbd></span><span>Close panels, deselect</span>
+    </div>
+  </section>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

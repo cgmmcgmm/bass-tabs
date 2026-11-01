@@ -2,26 +2,46 @@
 
 export const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
-export function pluck(ctx, dest, when, midi, dur, vel = 0.8) {
+/**
+ * Play one plucked voice. `glides` = [{ at (s after `when`), midi }] for slides /
+ * legato: the pitch moves into each new note over `glideTime` with no new attack.
+ */
+export function pluck(ctx, dest, when, midi, dur, vel = 0.8, glides = [], glideTime = 0.06) {
   const f = mtof(midi);
   const o1 = ctx.createOscillator(), o2 = ctx.createOscillator();
   o1.type = 'sawtooth'; o2.type = 'sine';
-  o1.frequency.value = f; o2.frequency.value = f;
+  o1.frequency.setValueAtTime(f, when); o2.frequency.setValueAtTime(f, when);
+  let prevMidi = midi, prevT = when;
+  for (const gl of glides) {
+    const t1 = when + gl.at;
+    const t0 = Math.max(prevT + 0.005, t1 - glideTime);
+    if (t1 <= t0) continue;
+    for (const o of [o1, o2]) {
+      o.frequency.setValueAtTime(mtof(prevMidi), t0);
+      o.frequency.exponentialRampToValueAtTime(mtof(gl.midi), t1);
+    }
+    prevMidi = gl.midi; prevT = t1;
+  }
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass'; lp.Q.value = 2;
   lp.frequency.setValueAtTime(Math.min(4000, f * 14), when);
   lp.frequency.exponentialRampToValueAtTime(Math.max(120, f * 2.5), when + 0.25);
   const g = ctx.createGain();
   const peak = 0.18 + 0.25 * vel;
-  const end = when + Math.max(0.08, dur);
+  const d = Math.max(0.06, dur);
+  const end = when + d;
+  // attack -> decay -> sustain -> release, all strictly in time order
+  const atk = when + 0.006;
+  const decayEnd = Math.min(when + 0.3, Math.max(atk + 0.01, end - 0.03));
+  const sustain = peak * Math.pow(0.45, (decayEnd - when) / 0.3); // where the decay curve is at decayEnd
   g.gain.setValueAtTime(0.0001, when);
-  g.gain.exponentialRampToValueAtTime(peak, when + 0.006);
-  g.gain.exponentialRampToValueAtTime(peak * 0.45, when + 0.3);
-  g.gain.setValueAtTime(peak * 0.45, Math.max(when + 0.3, end - 0.06));
-  g.gain.exponentialRampToValueAtTime(0.0001, end + 0.05);
+  g.gain.exponentialRampToValueAtTime(peak, atk);
+  g.gain.exponentialRampToValueAtTime(sustain, decayEnd);
+  g.gain.setValueAtTime(sustain, Math.max(decayEnd, end - 0.03));
+  g.gain.exponentialRampToValueAtTime(0.0001, end + 0.03);
   const sub = ctx.createGain(); sub.gain.value = 0.6;
   o1.connect(lp); o2.connect(sub); sub.connect(lp); lp.connect(g); g.connect(dest);
-  o1.start(when); o2.start(when); o1.stop(end + 0.1); o2.stop(end + 0.1);
+  o1.start(when); o2.start(when); o1.stop(end + 0.05); o2.stop(end + 0.05);
 }
 
 export function click(ctx, dest, when, accent) {

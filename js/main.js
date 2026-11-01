@@ -2,6 +2,9 @@ import { TUNINGS, segmentNotes, estimateTempo, arrange, positionsFor, noteName, 
 import { renderTab, cursorPos, timeAt, rangeRects } from './tab-render.js';
 import { pluck, click, makeDemo, encodeWav } from './synth.js';
 import { Mixer } from './mixer.js';
+import { loadConfig } from './config.js';
+
+const CONFIG = await loadConfig();
 
 const $ = (id) => document.getElementById(id);
 const mixer = new Mixer();
@@ -19,6 +22,21 @@ const state = {
 /* ---------- settings ---------- */
 for (const [k, t] of Object.entries(TUNINGS)) {
   const o = document.createElement('option'); o.value = k; o.textContent = t.name; $('tuning').appendChild(o);
+}
+function applyConfigDefaults() {
+  const c = CONFIG;
+  const set = (id, v) => { if (v !== undefined && v !== '') { $(id).value = v; $(id).dispatchEvent(new Event('input')); } };
+  if (c.instrument.tuning !== 'auto' && TUNINGS[c.instrument.tuning]) { $('tuning').value = c.instrument.tuning; $('tuning').dataset.auto = 'no'; }
+  else $('tuning').dataset.auto = '';
+  set('max-fret', c.instrument.frets);
+  set('grid', +c.rhythm.grid === 16 ? 4 : 2);
+  set('beats', c.rhythm.beats_per_bar);
+  set('sens', c.detection.onset_sensitivity);
+  set('min-note', c.detection.min_note_ms);
+  set('min-conf', c.detection.pitch_confidence);
+  set('gate', c.detection.noise_gate_db);
+  set('vol-synth', c.playback.tab_synth_volume);
+  set('vol-metro', c.playback.metronome_volume);
 }
 const fmt = { sens: (v) => v, 'min-note': (v) => v + ' ms', 'min-conf': (v) => v, gate: (v) => v + ' dB' };
 for (const id of Object.keys(fmt)) {
@@ -48,7 +66,10 @@ function setProgress(label, p) {
 const AUDIO_RE = /\.(wav|wave|mp3|m4a|aac|mp4|ogg|oga|opus|flac|aif|aiff|caf|webm)$/i;
 const PROJECT_RE = /\.(basstab|json)$/i;
 const baseName = (n) => n.replace(/\.[^.]+$/, '');
-const guessBass = (tracks) => tracks.find((t) => /bass/i.test(t.name)) || tracks[0];
+const guessBass = (tracks) => {
+  const key = String(CONFIG.mixer.tab_track_match || 'bass').toLowerCase();
+  return tracks.find((t) => t.name.toLowerCase().includes(key)) || tracks[0];
+};
 
 /** Entry point for files from the picker, drag & drop or a folder. */
 async function openFiles(fileList, { add = false } = {}) {
@@ -86,7 +107,8 @@ async function newProject(files) {
   mixer.clear();
   state.feat = null; state.seg = null; state.song = null;
   state.loop = null; state.loopOn = false; state.selected = null; mixer.setLoop(null);
-  $('tuning').dataset.auto = '';
+  if (CONFIG.instrument.tuning !== 'auto' && TUNINGS[CONFIG.instrument.tuning]) $('tuning').dataset.auto = 'no';
+  else $('tuning').dataset.auto = '';
   const loaded = await decodeAll(files);
   if (!loaded.length) { showView('empty'); return; }
   const tab = guessBass(loaded.map((l) => l.track));
@@ -166,7 +188,17 @@ async function loadProject(proj, files, fallbackTitle) {
   mixer.clear(); state.feat = null; state.seg = null; state.song = null; state.selected = null;
   const byName = new Map(files.map((f) => [f.name.toLowerCase(), f]));
   const wanted = proj.tracks.map((t) => ({ t, f: byName.get(t.name.toLowerCase()) }));
-  const missing = wanted.filter((w) => !w.f).map((w) => w.t.name);
+  let missing = wanted.filter((w) => !w.f).map((w) => w.t.name);
+  if (missing.length) {
+    showView(state.song ? 'song' : 'empty');
+    const extra = await askForMissing(missing);
+    for (const f of extra) {
+      const w = wanted.find((x) => !x.f && x.t.name.toLowerCase() === f.name.toLowerCase());
+      if (w) w.f = f;
+    }
+    missing = wanted.filter((w) => !w.f).map((w) => w.t.name);
+    showView('progress');
+  }
   const loaded = await decodeAll(wanted.filter((w) => w.f).map((w) => w.f), (f) => {
     const t = proj.tracks.find((x) => x.name.toLowerCase() === f.name.toLowerCase());
     return { vol: t.vol, mute: t.mute, solo: t.solo };
@@ -189,8 +221,31 @@ async function loadProject(proj, files, fallbackTitle) {
   await transcribeTrack(tab.track.id, tab.buffer, { notes, tempo: !notes });
   if (proj.loop) { state.loop = { a: proj.loop.a, b: proj.loop.b }; setLoopOn(!!proj.loop.on); if (!proj.loop.on) { state.loop = { a: proj.loop.a, b: proj.loop.b }; applyLoopHighlight(); } }
   renderMixer();
-  if (missing.length) alert(`Missing audio files (add them from the Mixer):\n${missing.join('\n')}`);
+  if (missing.length) alert(`Still missing (you can add them later from the Mixer):\n${missing.join('\n')}`);
   else toast(`Opened "${state.title}"`);
+}
+
+/** Ask the user to locate a project's audio files. Resolves to File[] (possibly empty). */
+function askForMissing(names) {
+  const dlg = $('missing');
+  $('missing-list').innerHTML = names.map((n) => `<li>${n.replace(/</g, '&lt;')}</li>`).join('');
+  $('missing-folder').hidden = !window.showDirectoryPicker;
+  return new Promise((resolve) => {
+    const done = (files) => { dlg.close(); resolve(files); };
+    $('missing-files').onchange = (e) => { const f = [...e.target.files]; e.target.value = ''; done(f); };
+    $('missing-folder').onclick = async () => {
+      try {
+        const dir = await window.showDirectoryPicker();
+        const want = new Set(names.map((n) => n.toLowerCase()));
+        const found = [];
+        for await (const h of dir.values()) if (h.kind === 'file' && want.has(h.name.toLowerCase())) found.push(await h.getFile());
+        done(found);
+      } catch (e) { if (e.name !== 'AbortError') alert(e.message); }
+    };
+    $('missing-skip').onclick = () => done([]);
+    dlg.oncancel = () => resolve([]);
+    dlg.showModal();
+  });
 }
 
 /* ---------- mixer panel ---------- */
@@ -276,6 +331,14 @@ function rearrange() {
   if (!state.seg) return;
   const o = arrOpts();
   state.song = arrange(state.seg.notes, o);
+  // playback order + slide chains (legato note that starts where the previous one ends)
+  state.playList = state.song.notes.filter((n) => !n.hidden).sort((a, b) => a.qStart - b.qStart);
+  state.playList.forEach((n, i) => {
+    const prev = state.playList[i - 1];
+    n.chainNext = null;
+    n.chainPrev = n.legato && prev && Math.abs(n.qStart - prev.qEnd) < state.song.slotDur / 2 ? prev : null;
+    if (n.chainPrev) prev.chainNext = n;
+  });
   $('offset').value = Math.round(state.song.offset * 1000) / 1000;
   const cents = Math.round(state.seg.tuningShift * 100);
   $('tuning-info').textContent = `Detected ${state.song.notes.length} notes. Recording is tuned ${
@@ -356,7 +419,8 @@ audio.addEventListener('pause', () => { state.playing = false; if (!state.counti
 audio.addEventListener('ended', () => { state.playing = false; setPlayIcon(false); });
 
 function setSpeed(s) {
-  state.speed = Math.round(Math.max(0.25, Math.min(1.5, s)) * 100) / 100;
+  const pb = CONFIG.playback;
+  state.speed = Math.round(Math.max(pb.min_speed_percent / 100, Math.min(pb.max_speed_percent / 100, s)) * 100) / 100;
   audio.playbackRate = state.speed;
   $('speed').textContent = Math.round(state.speed * 100) + '%';
   resetSched();
@@ -368,20 +432,32 @@ function seek(t) {
 }
 
 /* ---------- scheduling & cursor ---------- */
-let schedT = 0, lastT = 0, wrapDone = null;
-function resetSched() { schedT = audio.currentTime; lastT = audio.currentTime; wrapDone = null; }
+let schedT = 0, lastT = 0, wrapDone = null, passStart = 0;
+function resetSched() { schedT = audio.currentTime; lastT = audio.currentTime; wrapDone = null; passStart = schedT; }
 
 // Schedule synth notes and metronome clicks with times in [from, to).
 // `at(t)` converts a song time to an AudioContext time.
-function scheduleRange(from, to, at, lr) {
+// Slides/legato: a chain of notes is played as ONE voice that glides in pitch,
+// so only the first note of the chain is plucked.
+function scheduleRange(from, to, at, lr, pass) {
   if (to <= from) return;
   const song = state.song;
   if (+$('vol-synth').value > 0) {
-    for (const n of song.notes) {
-      if (n.hidden || n.qStart < from || n.qStart >= to) continue;
+    for (const n of state.playList) {
+      if (n.qStart < from) continue;
+      if (n.qStart >= to) break;
       if (lr && n.qStart >= lr[1]) continue;
-      const end = lr ? Math.min(n.qEnd, lr[1]) : n.qEnd;
-      pluck(ctx, synthGain, at(n.qStart), n.midi, ((end - n.qStart) / state.speed) * 0.95, n.vel);
+      const p = n.chainPrev;
+      if (p && p.qStart >= pass && (!lr || p.qStart >= lr[0])) continue; // already sounding as part of a slide
+      const glides = [];
+      let last = n;
+      while (last.chainNext && (!lr || last.chainNext.qStart < lr[1])) {
+        last = last.chainNext;
+        glides.push({ at: (last.qStart - n.qStart) / state.speed, midi: last.midi });
+      }
+      const end = lr ? Math.min(last.qEnd, lr[1]) : last.qEnd;
+      pluck(ctx, synthGain, at(n.qStart), n.midi, ((end - n.qStart) / state.speed) * 0.95, n.vel,
+        glides, CONFIG.playback.slide_time_ms / 1000 / state.speed);
     }
   }
   if (state.metro) {
@@ -400,7 +476,7 @@ function tick() {
   let t = audio.currentTime;
   if (state.playing) {
     const lr = state.loopOn && loopRange();
-    if (t < lastT - 0.02) { schedT = wrapDone ?? t; wrapDone = null; }   // loop wrapped
+    if (t < lastT - 0.02) { schedT = wrapDone ?? t; wrapDone = null; passStart = lr ? lr[0] : t; }   // loop wrapped
     else if (t - lastT > 0.5) resetSched();
     lastT = t;
     const now = ctx.currentTime;
@@ -408,13 +484,13 @@ function tick() {
     const horizon = t + 0.15 * state.speed;
     if (lr && t < lr[1] && horizon >= lr[1]) {
       // schedule up to the loop end, then the start of the next pass
-      scheduleRange(schedT, lr[1], at, lr);
+      scheduleRange(schedT, lr[1], at, lr, passStart);
       schedT = lr[1];
       const from = wrapDone ?? lr[0], to = lr[0] + (horizon - lr[1]);
-      scheduleRange(from, to, (et) => now + Math.max(0, (lr[1] - t + et - lr[0]) / state.speed), lr);
+      scheduleRange(from, to, (et) => now + Math.max(0, (lr[1] - t + et - lr[0]) / state.speed), lr, lr[0]);
       wrapDone = Math.max(from, to);
     } else if (horizon > schedT) {
-      scheduleRange(schedT, horizon, at, lr);
+      scheduleRange(schedT, horizon, at, lr, passStart);
       schedT = horizon;
     }
   }
@@ -641,22 +717,10 @@ $('copy-txt').onclick = async () => {
 /* ---------- wiring ---------- */
 const pick = (id, opts) => $(id).addEventListener('change', (e) => { openFiles(e.target.files, opts); e.target.value = ''; });
 pick('file'); pick('file2'); pick('add-file', { add: true });
-if (window.showDirectoryPicker) {
-  for (const id of ['open-folder', 'open-folder2']) {
-    $(id).hidden = false;
-    $(id).onclick = async () => {
-      try {
-        const dir = await window.showDirectoryPicker();
-        const files = [];
-        for await (const h of dir.values()) if (h.kind === 'file') files.push(await h.getFile());
-        const projects = files.filter((f) => PROJECT_RE.test(f.name));
-        // a folder with a project opens it; otherwise load all audio files in it
-        openFiles(projects.length ? [projects[0], ...files.filter((f) => !PROJECT_RE.test(f.name))] : files);
-      } catch (e) { if (e.name !== 'AbortError') alert(e.message); }
-    };
-  }
-}
 $('save').onclick = saveProject;
+function toggleKeys() { $('keys').hidden = !$('keys').hidden; }
+$('keys-btn').onclick = toggleKeys;
+$('keys-close').onclick = toggleKeys;
 $('mixer-btn').onclick = () => { $('mixer').hidden = !$('mixer').hidden; $('mixer-btn').classList.toggle('on', !$('mixer').hidden); };
 $('mixer-close').onclick = () => { $('mixer').hidden = true; $('mixer-btn').classList.remove('on'); };
 const demo = async () => {
@@ -681,8 +745,8 @@ window.addEventListener('drop', (e) => {
 
 $('play').onclick = toggle;
 $('rewind').onclick = () => seek(state.loopOn && loopRange() ? loopRange()[0] : 0);
-$('slower').onclick = () => setSpeed(state.speed - 0.05);
-$('faster').onclick = () => setSpeed(state.speed + 0.05);
+$('slower').onclick = () => setSpeed(state.speed - STEP);
+$('faster').onclick = () => setSpeed(state.speed + STEP);
 $('loop').onclick = () => setLoopOn(!state.loopOn);
 $('loop-in').onclick = setIn;
 $('loop-out').onclick = setOut;
@@ -699,6 +763,7 @@ $('countin').onclick = () => { state.countIn = !state.countIn; $('countin').clas
 $('settings-btn').onclick = () => ($('settings').hidden = !$('settings').hidden);
 $('settings-close').onclick = () => ($('settings').hidden = true);
 
+const STEP = (CONFIG.playback.speed_step_percent || 5) / 100;
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const reSeg = debounce(() => retranscribe(false), 150);
 for (const id of ['sens', 'min-note', 'min-conf', 'gate']) $(id).addEventListener('input', reSeg);
@@ -724,10 +789,11 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'o' || k === 'O') setOut();
   else if ((k === 'j' || k === 'J') && state.selected != null) mergePrev();
   else if (k === 'm' || k === 'M') $('metro').click();
-  else if (k === '[') setSpeed(state.speed - 0.05);
-  else if (k === ']') setSpeed(state.speed + 0.05);
+  else if (k === '[') setSpeed(state.speed - STEP);
+  else if (k === ']') setSpeed(state.speed + STEP);
   else if (k === 'Home') { e.preventDefault(); $('rewind').click(); }
-  else if (k === 'Escape') { selectNote(null); $('settings').hidden = true; }
+  else if (k === '?') toggleKeys();
+  else if (k === 'Escape') { selectNote(null); $('settings').hidden = true; $('keys').hidden = true; }
   else if (state.selected != null) {
     if (k === 'ArrowUp') { e.preventDefault(); moveString(1); }
     else if (k === 'ArrowDown') { e.preventDefault(); moveString(-1); }
@@ -739,6 +805,10 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+applyConfigDefaults();
+applyVolumes();
+state.metro = !!CONFIG.playback.metronome; $('metro').classList.toggle('on', state.metro);
+state.countIn = !!CONFIG.playback.count_in; $('countin').classList.toggle('on', state.countIn);
 setSpeed(1);
 requestAnimationFrame(tick);
 window.__bassTabs = state; // for debugging

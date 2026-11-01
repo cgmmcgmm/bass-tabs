@@ -1,8 +1,28 @@
 # Notes
 
-## Isolating the bass with Demucs
+## Ideas
 
-**Status:** implemented as option 1 below, a local helper (`helper/`). The notes below are kept for reference.
+### Done
+- ~~Isolate the bass with Demucs~~: done as a local PC helper (`helper/`). Details are in the reference section below.
+- ~~Multiple tracks / stems with a mixer~~: volume, mute, solo, labels and instrument icons.
+- ~~Save and reopen projects~~
+- ~~Transpose~~, with 🔒 to keep a track's original pitch.
+- ~~Use an uploaded recording as a track~~: add it in the Mixer and lock it with 🔒. (Comparing a recording against the tab is still open, below.)
+
+### Open (roughly quickest first)
+- **Synth sounds:** 3–5 presets for the tab synth (e.g. finger, pick, slap/bright, sub/synth bass, muted).
+- **MIDI export** of the tab.
+- **Live input:** play along through an audio interface or mic. The input is monitored and mixed with the tracks, and there's a latency setting.
+- **Section markers** (intro, verse, chorus) on bars, plus repeat signs.
+- **Record the live input** while the song plays, in sync with the tab and loop. The take is added as a locked track.
+- **Compare a recording against the tab** (or transcribe it).
+- **Guitar Pro / MusicXML export.**
+- **Tempo changes** within a song (a beat-tracking curve instead of one fixed BPM).
+- **Hammer-ons and pull-offs** detected separately from slides, plus ghost and dead notes (X).
+
+## Reference: isolating the bass with Demucs
+
+(Implemented as option 1, a local helper. These notes are kept for reference.)
 
 Transcription works best on a solo or DI bass track. On a full mix, the drums, guitars and vocals cause wrong pitches and false note starts. [Demucs](https://github.com/facebookresearch/demucs) (Meta, MIT licence) is a source-separation model that can pull the bass out of a full song. This would let users upload a normal song file.
 
@@ -25,15 +45,3 @@ Then upload `bass.wav` into the app.
 
 - On upload, ask whether it's a full mix ("Isolate bass first").
 - Let the user switch the playback audio between the full mix and the isolated bass. Transcription always uses the isolated bass.
-
-## Other ideas
-
-- **Live input:** play along through an audio interface or mic. The input is monitored and mixed with the tracks, and there's a latency setting.
-- **Record the live input** while the song plays, in sync with the tab and loop.
-- **Use a recording:** add the take as a track, or upload a new recording, then compare it against the tab (or transcribe it).
-- **Synth sounds:** 3–5 presets for the tab synth (e.g. finger, pick, slap/bright, sub/synth bass, muted).
-
-- MIDI and Guitar Pro (.gp) export.
-- Detecting hammer-ons and pull-offs versus slides, and ghost or dead notes (X).
-- Tempo changes within a song (a beat-tracking curve instead of one fixed BPM).
-- Section markers (intro, verse, chorus) and repeat signs.

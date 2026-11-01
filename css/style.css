@@ -170,3 +170,28 @@ main { max-width: 1400px; margin: 0 auto; padding: 0 16px; }
 .help-btn[aria-expanded="true"] { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
 .help { margin: 6px 0 0; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
   font-size: 12.5px; line-height: 1.45; color: var(--text); }
+
+.mixer {
+  position: fixed; z-index: 36; right: 16px; bottom: 96px; width: min(460px, calc(100% - 32px)); max-height: 60vh; overflow: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 12px 14px;
+}
+.mix-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.mix-row.extra { border-bottom: 0; padding: 4px 0; }
+.mix-row.extra .mix-name { color: var(--muted); }
+.mix-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.mix-row input[type=range] { width: 110px; flex: none; }
+.tab-src { display: flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 800; color: var(--muted); cursor: pointer; }
+.tab-src input { margin: 0; accent-color: var(--accent); }
+.tab-src input:checked + span { color: var(--accent); }
+.ms { width: 26px; height: 24px; border-radius: 6px; border: 1px solid var(--border); background: var(--btn); color: var(--muted);
+  font: 800 11px/1 system-ui, sans-serif; cursor: pointer; padding: 0; flex: none; }
+.ms.on { background: #e5a000; border-color: #e5a000; color: #fff; }
+.ms.solo.on { background: var(--accent); border-color: var(--accent); }
+.mix-row .x.rm { font-size: 20px; }
+.toast { position: fixed; z-index: 50; left: 50%; transform: translateX(-50%); top: 64px; background: var(--text); color: var(--bg);
+  padding: 9px 14px; border-radius: 9px; box-shadow: var(--shadow); font-size: 13px; max-width: calc(100% - 32px); }
+@media (max-width: 700px) {
+  .mixer { right: 16px; bottom: 160px; }
+  .mix-row input[type=range] { width: 80px; }
+  .wide-only-btn { display: none; }
+}

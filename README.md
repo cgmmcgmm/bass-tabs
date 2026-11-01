@@ -26,6 +26,16 @@ Then open http://localhost:8000. Click **Demo** to try it without a file. It als
   - Play/pause, speed 25–150% with pitch preserved, loop with free in/out points (drag across the tab, or tap In/Out while playing; snapped to the 16th grid), click to seek.
   - Auto-scrolling cursor and highlighting of the note that is playing.
   - Metronome, count-in, and a mix between the original audio and a synthesized tab track.
+- **Multiple tracks (stems)**:
+  - Open several files at once, or add and remove them later in the 🎚 Mixer. Each track has volume, mute and solo.
+  - The tab is made from the track marked **TAB** (by default the one with "bass" in its name). You can switch it at any time.
+  - All tracks play through one AudioWorklet engine that mixes and time-stretches them together (WSOLA). They stay sample-locked at any speed, and pitch doesn't change.
+- **Projects**: **Save** writes a small `.basstab` file with:
+  - The track list, mix and settings (tuning, tempo, downbeat, detection sliders).
+  - The speed, loop, metronome and count-in state.
+  - All note edits.
+
+  Audio isn't embedded. Keep the project file in the same folder as the audio files. To reopen, choose the `.basstab` together with its audio files (multi-select), or use **Open folder** in Chrome/Edge on desktop. Tracks are matched by file name; any missing ones are listed.
 - **Editing**: click a note to move it to another string or fret, change its pitch or octave, or delete it.
 - **Export**: plain-text tab (.txt), downloaded or copied.
 

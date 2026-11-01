@@ -10,10 +10,12 @@
   <header class="topbar">
     <div class="brand"><span class="logo">♪</span> <span class="brand-name">Bass Tabs</span></div>
     <div class="top-actions">
-      <label class="btn primary" title="Open a WAV (or any audio) file">
-        <input type="file" id="file" hidden>
-        Upload<span class="wide-only">&nbsp;audio</span>
+      <label class="btn primary" title="Open audio files (several stems at once) or a saved .basstab project together with its audio">
+        <input type="file" id="file" multiple hidden>
+        Open<span class="wide-only">files</span>
       </label>
+      <button class="btn wide-only-btn" id="open-folder" hidden title="Open a folder with audio files and/or a .basstab project">Open folder</button>
+      <button class="btn" id="save" hidden title="Save project (settings, edits, loop, mix)">Save</button>
       <button class="btn" id="demo">Demo</button>
       <button class="btn icon" id="settings-btn" title="Settings" aria-label="Settings">⚙</button>
     </div>
@@ -24,10 +26,13 @@
       <div class="drop" id="drop">
         <div class="drop-icon">🎸</div>
         <h1>Turn a bass recording into tabs</h1>
-        <p>Drop a <b>.wav</b> file here (mp3/ogg/m4a also work), or use <b>Upload audio</b>.<br>
-          Works best on isolated / solo bass parts. Everything runs locally in your browser.</p>
+        <p>Drop audio files here (WAV, MP3, M4A…) or choose them below. Pick <b>several stems at once</b>
+          (bass, drums, guitar…) to practise along with the whole song. The tab is made from the track with "bass" in its name.<br>
+          To reopen a saved project, choose the <b>.basstab</b> file <b>together with its audio files</b>.<br>
+          Everything runs locally in your browser.</p>
         <div class="drop-actions">
-          <label class="btn primary big"><input type="file" id="file2" hidden>Choose file</label>
+          <label class="btn primary big"><input type="file" id="file2" multiple hidden>Choose files</label>
+          <button class="btn big" id="open-folder2" hidden>Open folder</button>
           <button class="btn big" id="demo2">Try a demo riff</button>
         </div>
       </div>
@@ -145,13 +150,26 @@
       <button class="toggle" id="metro" title="Metronome (M)">Metronome</button>
       <button class="toggle" id="countin" title="Count-in before playing">Count-in</button>
     </div>
-    <div class="tgroup mix">
-      <label title="Original recording volume">Audio <input type="range" id="vol-orig" min="0" max="1" step="0.01" value="1"></label>
-      <label title="Synthesized tab playback volume">Tab <input type="range" id="vol-synth" min="0" max="1" step="0.01" value="0"></label>
+    <div class="tgroup">
+      <button class="toggle" id="mixer-btn" title="Tracks & volumes">🎚 Mixer</button>
     </div>
   </footer>
 
-  <audio id="audio" preload="auto"></audio>
+  <section id="mixer" class="mixer" hidden aria-label="Mixer">
+    <div class="insp-head"><b>Mixer</b><button class="x" id="mixer-close" aria-label="Close">×</button></div>
+    <div id="mixer-tracks"></div>
+    <p id="mixer-empty" class="muted small">No audio tracks.</p>
+    <div class="mix-row extra"><span class="mix-name">Tab synth</span>
+      <input type="range" id="vol-synth" min="0" max="1" step="0.01" value="0" aria-label="Tab synth volume"></div>
+    <div class="mix-row extra"><span class="mix-name">Metronome</span>
+      <input type="range" id="vol-metro" min="0" max="1" step="0.01" value="0.6" aria-label="Metronome volume"></div>
+    <div class="insp-row">
+      <label class="btn sm"><input type="file" id="add-file" multiple hidden>+ Add tracks</label>
+      <span class="muted small"><b>TAB</b> = track the tab is made from · M mute · S solo</span>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" hidden role="status"></div>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

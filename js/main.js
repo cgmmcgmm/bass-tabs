@@ -1,9 +1,11 @@
 import { TUNINGS, segmentNotes, estimateTempo, arrange, positionsFor, noteName, toAsciiTab } from './transcribe.js';
 import { renderTab, cursorPos, timeAt, rangeRects } from './tab-render.js';
 import { pluck, click, makeDemo, encodeWav } from './synth.js';
+import { Mixer } from './mixer.js';
 
 const $ = (id) => document.getElementById(id);
-const audio = $('audio');
+const mixer = new Mixer();
+const audio = mixer; // same API as an <audio> element (currentTime, play, pause, ...)
 const ANALYSIS_SR = 11025;
 const HOP = 128;
 
@@ -11,6 +13,7 @@ const state = {
   feat: null, seg: null, song: null, layout: null, title: '',
   selected: null, loop: null, loopOn: false, metro: false, countIn: false,
   speed: 1, playing: false, countingIn: false,
+  tabTrack: null, // id of the track the tab is transcribed from
 };
 
 /* ---------- settings ---------- */
@@ -42,39 +45,200 @@ function setProgress(label, p) {
   $('progress-fill').style.width = Math.round(p * 100) + '%';
 }
 
-async function loadFile(file) {
-  if (!file) return;
+const AUDIO_RE = /\.(wav|wave|mp3|m4a|aac|mp4|ogg|oga|opus|flac|aif|aiff|caf|webm)$/i;
+const PROJECT_RE = /\.(basstab|json)$/i;
+const baseName = (n) => n.replace(/\.[^.]+$/, '');
+const guessBass = (tracks) => tracks.find((t) => /bass/i.test(t.name)) || tracks[0];
+
+/** Entry point for files from the picker, drag & drop or a folder. */
+async function openFiles(fileList, { add = false } = {}) {
+  const files = [...fileList];
+  const project = files.find((f) => PROJECT_RE.test(f.name));
+  const audioFiles = files.filter((f) => f !== project && (AUDIO_RE.test(f.name) || f.type.startsWith('audio/')));
   try {
-    showView('progress'); setProgress('Decoding audio…', 0.02);
-    const buf = await file.arrayBuffer();
-    await loadAudio(buf, file.name.replace(/\.[^.]+$/, ''), URL.createObjectURL(file));
+    if (project) return await loadProject(JSON.parse(await project.text()), audioFiles, baseName(baseName(project.name)));
+    if (!audioFiles.length) {
+      if (files.length) alert('No audio files found. Choose WAV, MP3, M4A (or a saved .basstab project).');
+      return;
+    }
+    if (add && state.song) await addTracks(audioFiles);
+    else await newProject(audioFiles);
   } catch (err) {
     console.error(err);
-    alert(`Couldn't decode "${file.name}" as audio. Try WAV, MP3 or M4A.`);
+    alert(err.message || String(err));
     showView(state.song ? 'song' : 'empty');
   }
 }
 
-async function loadAudio(arrayBuffer, title, url) {
-  stop();
-  const tmp = new (window.AudioContext || window.webkitAudioContext)();
-  const decoded = await tmp.decodeAudioData(arrayBuffer);
-  tmp.close();
-  setProgress('Resampling…', 0.05);
-  const len = Math.ceil(decoded.duration * ANALYSIS_SR);
-  const off = new OfflineAudioContext(1, len, ANALYSIS_SR);
-  const src = off.createBufferSource(); src.buffer = decoded; src.connect(off.destination); src.start();
-  const rendered = await off.startRendering();
-  const samples = rendered.getChannelData(0).slice();
+async function decodeAll(files, opts = () => ({})) {
+  const out = [];
+  for (let i = 0; i < files.length; i++) {
+    setProgress(`Loading ${files[i].name}…`, 0.02 + 0.06 * (i / files.length));
+    try { out.push(await mixer.addFile(files[i], opts(files[i]))); }
+    catch (e) { console.error(e); alert(`Couldn't decode "${files[i].name}" as audio. Try WAV, MP3 or M4A.`); }
+  }
+  return out;
+}
 
-  if (audio.src) URL.revokeObjectURL(audio.src);
-  audio.src = url;
-  state.title = title;
+async function newProject(files) {
+  pause();
+  showView('progress');
+  mixer.clear();
+  state.feat = null; state.seg = null; state.song = null;
+  state.loop = null; state.loopOn = false; state.selected = null; mixer.setLoop(null);
+  $('tuning').dataset.auto = '';
+  const loaded = await decodeAll(files);
+  if (!loaded.length) { showView('empty'); return; }
+  const tab = guessBass(loaded.map((l) => l.track));
+  state.title = baseName(tab.name);
+  await transcribeTrack(tab.id, loaded.find((l) => l.track === tab).buffer, { tempo: true, tuning: true });
+  renderMixer();
+}
+
+async function addTracks(files) {
+  const loaded = await decodeAll(files);
+  renderMixer();
+  if (loaded.length) toast(`Added ${loaded.map((l) => l.track.name).join(', ')}`);
+}
+
+/** Analyze one track and build the tab from it. */
+async function transcribeTrack(id, buffer, { tempo = false, tuning = false, notes = null } = {}) {
+  const track = mixer.tracks.find((t) => t.id === id);
+  if (!buffer) buffer = await mixer.ctx.decodeAudioData(await track.file.arrayBuffer());
+  showView('progress'); setProgress('Resampling…', 0.08);
+  const len = Math.ceil(buffer.duration * ANALYSIS_SR);
+  const off = new OfflineAudioContext(1, len, ANALYSIS_SR);
+  const src = off.createBufferSource(); src.buffer = buffer; src.connect(off.destination); src.start();
+  const samples = (await off.startRendering()).getChannelData(0).slice();
   state.feat = await analyze(samples);
+  state.tabTrack = id;
   setProgress('Transcribing…', 1);
-  state.loop = null; state.loopOn = false; state.selected = null;
   showView('song');
-  retranscribe(true, true);
+  if (notes) {
+    state.seg = { notes, tuningShift: 0, onsets: [] };
+    rearrange();
+  } else retranscribe(tempo, tuning);
+  updateTime();
+}
+
+/* ---------- projects ---------- */
+const SETTING_IDS = ['tuning', 'max-fret', 'bpm', 'offset', 'beats', 'grid', 'sens', 'min-note', 'min-conf', 'gate', 'vol-synth', 'vol-metro'];
+
+function projectData() {
+  const tab = mixer.tracks.find((t) => t.id === state.tabTrack);
+  return {
+    app: 'bass-tabs', version: 1, savedAt: new Date().toISOString(), title: state.title,
+    tracks: mixer.tracks.map((t) => ({ name: t.name, size: t.size, vol: t.vol, mute: t.mute, solo: t.solo, tab: t.id === state.tabTrack })),
+    tabTrack: tab?.name || null,
+    settings: Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])),
+    tuningManual: $('tuning').dataset.auto === 'no',
+    speed: state.speed, metro: state.metro, countIn: state.countIn,
+    loop: state.loop ? { a: state.loop.a, b: state.loop.b, on: state.loopOn } : null,
+    notes: state.seg ? state.seg.notes.map((n) => ({
+      start: +n.start.toFixed(4), end: +n.end.toFixed(4), midi: n.midi, vel: +n.vel.toFixed(3),
+      ...(n.legato ? { legato: true } : {}), ...(n.deleted ? { deleted: true } : {}), ...(n.pinned ? { pinned: n.pinned } : {}),
+    })) : null,
+  };
+}
+
+async function saveProject() {
+  if (!state.song) return;
+  const name = (state.title || 'bass-tab') + '.basstab';
+  const blob = new Blob([JSON.stringify(projectData(), null, 1)], { type: 'application/json' });
+  if (window.showSaveFilePicker) {
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Bass Tabs project', accept: { 'application/json': ['.basstab'] } }] });
+      const w = await h.createWritable(); await w.write(blob); await w.close();
+      toast('Project saved. Keep it in the same folder as the audio files.');
+      return;
+    } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('Project downloaded. Move it next to the audio files to reopen them together.');
+}
+
+async function loadProject(proj, files, fallbackTitle) {
+  if (proj.app !== 'bass-tabs') throw new Error('That file is not a Bass Tabs project.');
+  pause();
+  showView('progress');
+  mixer.clear(); state.feat = null; state.seg = null; state.song = null; state.selected = null;
+  const byName = new Map(files.map((f) => [f.name.toLowerCase(), f]));
+  const wanted = proj.tracks.map((t) => ({ t, f: byName.get(t.name.toLowerCase()) }));
+  const missing = wanted.filter((w) => !w.f).map((w) => w.t.name);
+  const loaded = await decodeAll(wanted.filter((w) => w.f).map((w) => w.f), (f) => {
+    const t = proj.tracks.find((x) => x.name.toLowerCase() === f.name.toLowerCase());
+    return { vol: t.vol, mute: t.mute, solo: t.solo };
+  });
+  for (const [id, v] of Object.entries(proj.settings || {})) if ($(id)) { $(id).value = v; $(id).dispatchEvent(new Event('input')); }
+  $('tuning').dataset.auto = proj.tuningManual ? 'no' : '';
+  state.title = proj.title || fallbackTitle;
+  setSpeed(proj.speed || 1);
+  state.metro = !!proj.metro; $('metro').classList.toggle('on', state.metro);
+  state.countIn = !!proj.countIn; $('countin').classList.toggle('on', state.countIn);
+  if (!loaded.length) {
+    showView('empty');
+    alert(`None of this project's audio files were selected.\nChoose the project together with: ${proj.tracks.map((t) => t.name).join(', ')}`);
+    return;
+  }
+  const tab = loaded.find((l) => l.track.name.toLowerCase() === (proj.tabTrack || '').toLowerCase()) || loaded[0];
+  const notes = tab.track.name.toLowerCase() === (proj.tabTrack || '').toLowerCase() && proj.notes
+    ? proj.notes.map((n, i) => ({ ...n, id: i, legato: !!n.legato, fromOnset: true }))
+    : null;
+  await transcribeTrack(tab.track.id, tab.buffer, { notes, tempo: !notes });
+  if (proj.loop) { state.loop = { a: proj.loop.a, b: proj.loop.b }; setLoopOn(!!proj.loop.on); if (!proj.loop.on) { state.loop = { a: proj.loop.a, b: proj.loop.b }; applyLoopHighlight(); } }
+  renderMixer();
+  if (missing.length) alert(`Missing audio files (add them from the Mixer):\n${missing.join('\n')}`);
+  else toast(`Opened "${state.title}"`);
+}
+
+/* ---------- mixer panel ---------- */
+function updateSub() {
+  const nt = mixer.tracks.length;
+  $('song-sub').textContent = (state.subBase || '') + (nt > 1 ? ` · ${nt} tracks` : '');
+}
+mixer.addEventListener('tracks', updateSub);
+function renderMixer() {
+  const list = $('mixer-tracks');
+  list.innerHTML = '';
+  for (const t of mixer.tracks) {
+    const row = document.createElement('div');
+    row.className = 'mix-row';
+    row.innerHTML = `
+      <label class="tab-src" title="Make the tab from this track"><input type="radio" name="tabsrc" ${t.id === state.tabTrack ? 'checked' : ''}><span>TAB</span></label>
+      <span class="mix-name" title="${t.name.replace(/"/g, '&quot;')}">${t.name.replace(/</g, '&lt;')}</span>
+      <button class="ms ${t.mute ? 'on' : ''}" data-k="mute" title="Mute">M</button>
+      <button class="ms solo ${t.solo ? 'on' : ''}" data-k="solo" title="Solo">S</button>
+      <input type="range" min="0" max="1" step="0.01" value="${t.vol}" aria-label="Volume of ${t.name.replace(/"/g, '&quot;')}">
+      <button class="x rm" title="Remove track" aria-label="Remove track">×</button>`;
+    row.querySelector('input[type=range]').oninput = (e) => mixer.update(t.id, { vol: +e.target.value });
+    row.querySelectorAll('.ms').forEach((b) => (b.onclick = () => {
+      mixer.update(t.id, { [b.dataset.k]: !t[b.dataset.k] }); b.classList.toggle('on', t[b.dataset.k]);
+    }));
+    row.querySelector('.rm').onclick = () => {
+      if (t.id === state.tabTrack && !confirm(`"${t.name}" is the track the tab was made from. Remove it anyway? (The tab stays.)`)) return;
+      mixer.removeTrack(t.id);
+      if (t.id === state.tabTrack) state.tabTrack = null;
+      renderMixer(); updateTime();
+    };
+    row.querySelector('input[type=radio]').onchange = async () => {
+      if (!confirm(`Make the tab from "${t.name}"? This re-runs detection and discards note edits.`)) { renderMixer(); return; }
+      pause();
+      state.title = baseName(t.name);
+      await transcribeTrack(t.id, null, { tempo: true, tuning: true });
+      renderMixer();
+    };
+    list.appendChild(row);
+  }
+  $('mixer-empty').hidden = mixer.tracks.length > 0;
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (el.hidden = true), 3500);
 }
 
 function analyze(samples) {
@@ -118,7 +282,9 @@ function rearrange() {
     Math.abs(cents) < 4 ? 'to A440' : (cents > 0 ? '+' : '') + cents + ' cents from A440'}.`;
   const t = o.tuning.strings.map((m) => noteName(m, false)).join(' ');
   $('song-title').textContent = state.title || 'Untitled';
-  $('song-sub').textContent = `Electric Bass · ${t} · ${o.bpm} BPM · ${state.song.bars.length} bars`;
+  state.subBase = `Electric Bass · ${t} · ${o.bpm} BPM · ${state.song.bars.length} bars`;
+  updateSub();
+  $('save').hidden = false;
   render();
 }
 
@@ -132,26 +298,16 @@ function render() {
 }
 
 /* ---------- audio graph ---------- */
-let ctx = null, origGain, synthGain, metroGain;
-function ensureCtx() {
-  if (!ctx) {
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const src = ctx.createMediaElementSource(audio);
-    origGain = ctx.createGain(); synthGain = ctx.createGain(); metroGain = ctx.createGain();
-    src.connect(origGain).connect(ctx.destination);
-    synthGain.connect(ctx.destination); metroGain.connect(ctx.destination);
-    metroGain.gain.value = 0.6;
-    applyVolumes();
-  }
-  if (ctx.state === 'suspended') ctx.resume();
-}
+const ctx = mixer.ctx;
+const synthGain = ctx.createGain(), metroGain = ctx.createGain();
+synthGain.connect(ctx.destination); metroGain.connect(ctx.destination);
 function applyVolumes() {
-  if (!ctx) return;
-  origGain.gain.value = +$('vol-orig').value;
   synthGain.gain.value = +$('vol-synth').value * 1.5;
+  metroGain.gain.value = +$('vol-metro').value;
 }
-$('vol-orig').addEventListener('input', applyVolumes);
 $('vol-synth').addEventListener('input', applyVolumes);
+$('vol-metro').addEventListener('input', applyVolumes);
+applyVolumes();
 
 /* ---------- transport ---------- */
 const loopRange = () => {
@@ -170,9 +326,8 @@ const barAt = (t) => {
 
 async function play() {
   if (!state.song || state.playing || state.countingIn) return;
-  ensureCtx();
+  if (ctx.state !== 'running') await ctx.resume();
   audio.playbackRate = state.speed;
-  audio.preservesPitch = true; audio.mozPreservesPitch = true; audio.webkitPreservesPitch = true;
   const lr = state.loopOn && loopRange();
   if (lr && (audio.currentTime < lr[0] - 0.01 || audio.currentTime >= lr[1])) audio.currentTime = Math.max(0, lr[0]);
   if (audio.currentTime < 0.01 && state.song.offset > 0 && !lr) {
@@ -191,7 +346,7 @@ async function play() {
   try { await audio.play(); } catch (e) { console.warn(e); }
 }
 function pause() { state.wantPlay = false; audio.pause(); }
-function stop() { pause(); if (audio.src) audio.currentTime = 0; }
+function stop() { pause(); audio.currentTime = 0; }
 function toggle() {
   if (state.playing || state.countingIn) pause(); else { state.wantPlay = true; play(); }
 }
@@ -199,7 +354,6 @@ function setPlayIcon(on) { $('play').textContent = on ? '❚❚' : '▶'; $('pla
 audio.addEventListener('play', () => { state.playing = true; setPlayIcon(true); resetSched(); });
 audio.addEventListener('pause', () => { state.playing = false; if (!state.countingIn) setPlayIcon(false); clearActive(); });
 audio.addEventListener('ended', () => { state.playing = false; setPlayIcon(false); });
-audio.addEventListener('loadedmetadata', () => updateTime());
 
 function setSpeed(s) {
   state.speed = Math.round(Math.max(0.25, Math.min(1.5, s)) * 100) / 100;
@@ -210,12 +364,35 @@ function setSpeed(s) {
 
 function seek(t) {
   audio.currentTime = Math.max(0, Math.min(t, audio.duration || t));
-  resetSched(); updateCursor(true);
+  resetSched(); updateCursor(true); updateTime();
 }
 
 /* ---------- scheduling & cursor ---------- */
-let schedT = 0, lastT = 0;
-function resetSched() { schedT = audio.currentTime; lastT = audio.currentTime; }
+let schedT = 0, lastT = 0, wrapDone = null;
+function resetSched() { schedT = audio.currentTime; lastT = audio.currentTime; wrapDone = null; }
+
+// Schedule synth notes and metronome clicks with times in [from, to).
+// `at(t)` converts a song time to an AudioContext time.
+function scheduleRange(from, to, at, lr) {
+  if (to <= from) return;
+  const song = state.song;
+  if (+$('vol-synth').value > 0) {
+    for (const n of song.notes) {
+      if (n.hidden || n.qStart < from || n.qStart >= to) continue;
+      if (lr && n.qStart >= lr[1]) continue;
+      const end = lr ? Math.min(n.qEnd, lr[1]) : n.qEnd;
+      pluck(ctx, synthGain, at(n.qStart), n.midi, ((end - n.qStart) / state.speed) * 0.95, n.vel);
+    }
+  }
+  if (state.metro) {
+    const P = 60 / song.bpm, bpb = song.beatsPerBar;
+    for (let k = Math.ceil((from - song.offset) / P - 1e-9); song.offset + k * P < to; k++) {
+      const bt = song.offset + k * P;
+      if (bt < 0 || (lr && bt >= lr[1] - 1e-3)) continue;
+      click(ctx, metroGain, at(bt), ((k % bpb) + bpb) % bpb === 0);
+    }
+  }
+}
 
 function tick() {
   requestAnimationFrame(tick);
@@ -223,28 +400,21 @@ function tick() {
   let t = audio.currentTime;
   if (state.playing) {
     const lr = state.loopOn && loopRange();
-    if (lr && t >= lr[1]) { audio.currentTime = lr[0]; t = lr[0]; resetSched(); }
-    if (t < lastT - 0.02 || t - lastT > 0.5) resetSched();
+    if (t < lastT - 0.02) { schedT = wrapDone ?? t; wrapDone = null; }   // loop wrapped
+    else if (t - lastT > 0.5) resetSched();
     lastT = t;
-    const horizon = t + 0.12 * state.speed;
-    if (horizon > schedT) {
-      const toCtx = (et) => ctx.currentTime + Math.max(0, (et - t) / state.speed);
-      if (+$('vol-synth').value > 0) {
-        for (const n of state.song.notes) {
-          if (n.hidden || n.qStart < schedT || n.qStart >= horizon) continue;
-          if (lr && n.qStart >= lr[1]) continue;
-          pluck(ctx, synthGain, toCtx(n.qStart), n.midi, (n.qEnd - n.qStart) / state.speed * 0.95, n.vel);
-        }
-      }
-      if (state.metro) {
-        const P = 60 / state.song.bpm;
-        const k0 = Math.ceil((schedT - state.song.offset) / P);
-        for (let k = k0; state.song.offset + k * P < horizon; k++) {
-          const bt = state.song.offset + k * P;
-          if (bt < 0 || (lr && bt >= lr[1] - 1e-3)) continue;
-          click(ctx, metroGain, toCtx(bt), ((k % state.song.beatsPerBar) + state.song.beatsPerBar) % state.song.beatsPerBar === 0);
-        }
-      }
+    const now = ctx.currentTime;
+    const at = (et) => now + Math.max(0, (et - t) / state.speed);
+    const horizon = t + 0.15 * state.speed;
+    if (lr && t < lr[1] && horizon >= lr[1]) {
+      // schedule up to the loop end, then the start of the next pass
+      scheduleRange(schedT, lr[1], at, lr);
+      schedT = lr[1];
+      const from = wrapDone ?? lr[0], to = lr[0] + (horizon - lr[1]);
+      scheduleRange(from, to, (et) => now + Math.max(0, (lr[1] - t + et - lr[0]) / state.speed), lr);
+      wrapDone = Math.max(from, to);
+    } else if (horizon > schedT) {
+      scheduleRange(schedT, horizon, at, lr);
       schedT = horizon;
     }
   }
@@ -325,6 +495,7 @@ function setLoop(a, b) {
   if (b - a < min) b = a + min;
   state.loop = { a, b };
   state.loopOn = true;
+  mixer.setLoop(a, b);
   applyLoopHighlight();
   resetSched();
 }
@@ -336,6 +507,7 @@ function setLoopOn(on) {
   }
   state.loopOn = on && !!state.loop;
   if (!on) state.loop = null;
+  mixer.setLoop(state.loopOn ? state.loop.a : null, state.loopOn ? state.loop.b : null);
   applyLoopHighlight();
 }
 function setIn() {
@@ -467,14 +639,34 @@ $('copy-txt').onclick = async () => {
 };
 
 /* ---------- wiring ---------- */
-$('file').addEventListener('change', (e) => loadFile(e.target.files[0]));
-$('file2').addEventListener('change', (e) => loadFile(e.target.files[0]));
+const pick = (id, opts) => $(id).addEventListener('change', (e) => { openFiles(e.target.files, opts); e.target.value = ''; });
+pick('file'); pick('file2'); pick('add-file', { add: true });
+if (window.showDirectoryPicker) {
+  for (const id of ['open-folder', 'open-folder2']) {
+    $(id).hidden = false;
+    $(id).onclick = async () => {
+      try {
+        const dir = await window.showDirectoryPicker();
+        const files = [];
+        for await (const h of dir.values()) if (h.kind === 'file') files.push(await h.getFile());
+        const projects = files.filter((f) => PROJECT_RE.test(f.name));
+        // a folder with a project opens it; otherwise load all audio files in it
+        openFiles(projects.length ? [projects[0], ...files.filter((f) => !PROJECT_RE.test(f.name))] : files);
+      } catch (e) { if (e.name !== 'AbortError') alert(e.message); }
+    };
+  }
+}
+$('save').onclick = saveProject;
+$('mixer-btn').onclick = () => { $('mixer').hidden = !$('mixer').hidden; $('mixer-btn').classList.toggle('on', !$('mixer').hidden); };
+$('mixer-close').onclick = () => { $('mixer').hidden = true; $('mixer-btn').classList.remove('on'); };
 const demo = async () => {
   showView('progress'); setProgress('Generating demo…', 0.01);
   await new Promise((r) => setTimeout(r, 20));
-  const { samples, sr } = makeDemo();
-  const blob = encodeWav(samples, sr);
-  await loadAudio(await blob.arrayBuffer(), 'Demo Riff', URL.createObjectURL(blob));
+  const { samples, drums, sr } = makeDemo();
+  await openFiles([
+    new File([encodeWav(samples, sr)], 'Demo bass.wav', { type: 'audio/wav' }),
+    new File([encodeWav(drums, sr)], 'Demo drums.wav', { type: 'audio/wav' }),
+  ]);
 };
 $('demo').onclick = demo; $('demo2').onclick = demo;
 
@@ -484,8 +676,7 @@ window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth =
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => {
   e.preventDefault(); dragDepth = 0; document.body.classList.remove('dragging');
-  const f = e.dataTransfer.files[0];
-  if (f) loadFile(f);
+  if (e.dataTransfer.files.length) openFiles(e.dataTransfer.files, { add: !!state.song && ![...e.dataTransfer.files].some((f) => PROJECT_RE.test(f.name)) });
 });
 
 $('play').onclick = toggle;
@@ -551,3 +742,4 @@ window.addEventListener('keydown', (e) => {
 setSpeed(1);
 requestAnimationFrame(tick);
 window.__bassTabs = state; // for debugging
+window.__mixer = mixer;

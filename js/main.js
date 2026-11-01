@@ -50,7 +50,7 @@ async function loadFile(file) {
     await loadAudio(buf, file.name.replace(/\.[^.]+$/, ''), URL.createObjectURL(file));
   } catch (err) {
     console.error(err);
-    alert('Could not read that file: ' + err.message);
+    alert(`Couldn't decode "${file.name}" as audio. Try WAV, MP3 or M4A.`);
     showView(state.song ? 'song' : 'empty');
   }
 }

@@ -3,11 +3,12 @@ import { renderTab, cursorPos, timeAt, rangeRects } from './tab-render.js';
 import { pluck, click, makeDemo, encodeWav } from './synth.js';
 import { Mixer } from './mixer.js';
 import { loadConfig } from './config.js';
-import { KINDS, autoLabel, setAutoLabels } from './kinds.js';
+import { KINDS, autoLabel, setAutoLabels, setUnknownLabel } from './kinds.js';
 import { helper, connectHelper, setHelperUrl, separate, fetchStem } from './helper.js';
 
 const CONFIG = await loadConfig();
 if (CONFIG.auto_labels) setAutoLabels(CONFIG.auto_labels);
+setUnknownLabel(CONFIG.mixer.unknown_label);
 
 const $ = (id) => document.getElementById(id);
 const mixer = new Mixer();
@@ -53,6 +54,7 @@ const arrOpts = () => ({
   bpm: Math.max(20, +$('bpm').value || 120), offset: +$('offset').value || 0,
   grid: +$('grid').value, beatsPerBar: +$('beats').value,
   tuning: TUNINGS[$('tuning').value], maxFret: Math.max(5, Math.min(30, +$('max-fret').value || 20)),
+  transpose: state.transpose || 0,
 });
 
 /* ---------- loading ---------- */
@@ -112,6 +114,7 @@ async function newProject(files) {
   mixer.clear();
   state.feat = null; state.seg = null; state.song = null;
   state.loop = null; state.loopOn = false; state.selected = null; mixer.setLoop(null);
+  setTranspose(0);
   if (CONFIG.instrument.tuning !== 'auto' && TUNINGS[CONFIG.instrument.tuning]) $('tuning').dataset.auto = 'no';
   else $('tuning').dataset.auto = '';
   const loaded = await decodeAll(files);
@@ -155,11 +158,11 @@ function projectData() {
   const tab = mixer.tracks.find((t) => t.id === state.tabTrack);
   return {
     app: 'bass-tabs', version: 1, savedAt: new Date().toISOString(), title: state.title,
-    tracks: mixer.tracks.map((t) => ({ name: t.name, size: t.size, vol: t.vol, mute: t.mute, solo: t.solo, tab: t.id === state.tabTrack, label: t.label, kind: t.kind, ...(t.remote ? { remote: t.remote } : {}) })),
+    tracks: mixer.tracks.map((t) => ({ name: t.name, size: t.size, vol: t.vol, mute: t.mute, solo: t.solo, tab: t.id === state.tabTrack, protect: t.protect || undefined, label: t.label, kind: t.kind, ...(t.remote ? { remote: t.remote } : {}) })),
     tabTrack: tab?.name || null,
     settings: Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])),
     tuningManual: $('tuning').dataset.auto === 'no',
-    speed: state.speed, metro: state.metro, countIn: state.countIn,
+    speed: state.speed, transpose: state.transpose || 0, metro: state.metro, countIn: state.countIn,
     loop: state.loop ? { a: state.loop.a, b: state.loop.b, on: state.loopOn } : null,
     notes: state.seg ? state.seg.notes.map((n) => ({
       start: +n.start.toFixed(4), end: +n.end.toFixed(4), midi: n.midi, vel: +n.vel.toFixed(3),
@@ -207,12 +210,13 @@ async function loadProject(proj, files, fallbackTitle) {
   }
   const loaded = await decodeAll(wanted.filter((w) => w.f).map((w) => w.f), (f) => {
     const t = proj.tracks.find((x) => x.name.toLowerCase() === f.name.toLowerCase());
-    return { vol: t.vol, mute: t.mute, solo: t.solo, remote: t.remote, label: t.label, kind: t.kind };
+    return { vol: t.vol, mute: t.mute, solo: t.solo, protect: t.protect, remote: t.remote, label: t.label, kind: t.kind };
   });
   for (const [id, v] of Object.entries(proj.settings || {})) if ($(id)) { $(id).value = v; $(id).dispatchEvent(new Event('input')); }
   $('tuning').dataset.auto = proj.tuningManual ? 'no' : '';
   state.title = proj.title || fallbackTitle;
   setSpeed(proj.speed || 1);
+  state.transpose = 0; setTranspose(proj.transpose || 0);
   state.metro = !!proj.metro; $('metro').classList.toggle('on', state.metro);
   state.countIn = !!proj.countIn; $('countin').classList.toggle('on', state.countIn);
   if (!loaded.length) {
@@ -353,7 +357,7 @@ function renderMixer() {
   for (const t of mixer.tracks) {
     const row = document.createElement('div');
     row.className = 'mix-row';
-    autoLabel(t, mixer.tracks.length === 1);
+    autoLabel(t);
     const K = KINDS[t.kind] || KINDS.other;
     const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     row.innerHTML = `
@@ -365,6 +369,7 @@ function renderMixer() {
       </div>
       <button class="ms ${t.mute ? 'on' : ''}" data-k="mute" title="Mute">M</button>
       <button class="ms solo ${t.solo ? 'on' : ''}" data-k="solo" title="Solo">S</button>
+      <button class="ms lock ${t.protect ? 'on' : ''}" data-k="protect" title="Keep original pitch when transposing (e.g. your own recording)" aria-label="Protect from transpose">🔒</button>
       <input type="range" min="0" max="1" step="0.01" value="${t.vol}" aria-label="Volume of ${esc(t.label)}">
       ${helper.url ? '<button class="ms split" title="Split into stems with Demucs">✂</button>' : ''}
       <button class="x rm" title="Remove track" aria-label="Remove track">×</button>`;
@@ -471,7 +476,8 @@ function rearrange() {
     Math.abs(cents) < 4 ? 'to A440' : (cents > 0 ? '+' : '') + cents + ' cents from A440'}.`;
   const t = o.tuning.strings.map((m) => noteName(m, false)).join(' ');
   $('song-title').textContent = state.title || 'Untitled';
-  state.subBase = `Electric Bass · ${t} · ${o.bpm} BPM · ${state.song.bars.length} bars`;
+  const tr = o.transpose ? ` · transposed ${o.transpose > 0 ? '+' : '−'}${Math.abs(o.transpose)}` : '';
+  state.subBase = `Electric Bass · ${t} · ${o.bpm} BPM · ${state.song.bars.length} bars${tr}`;
   updateSub();
   $('save').hidden = false;
   render();
@@ -552,6 +558,16 @@ function setSpeed(s) {
   resetSched();
 }
 
+function setTranspose(semis) {
+  semis = Math.max(-12, Math.min(12, Math.round(semis)));
+  state.transpose = semis;
+  mixer.transpose = semis;
+  $('transpose').textContent = semis > 0 ? `+${semis}` : semis < 0 ? `−${-semis}` : '0';
+  $('transpose').classList.toggle('on', semis !== 0);
+  resetSched();
+  if (state.seg) rearrange();
+}
+
 function seek(t) {
   audio.currentTime = Math.max(0, Math.min(t, audio.duration || t));
   resetSched(); updateCursor(true); updateTime();
@@ -579,10 +595,10 @@ function scheduleRange(from, to, at, lr, pass) {
       let last = n;
       while (last.chainNext && (!lr || last.chainNext.qStart < lr[1])) {
         last = last.chainNext;
-        glides.push({ at: (last.qStart - n.qStart) / state.speed, midi: last.midi });
+        glides.push({ at: (last.qStart - n.qStart) / state.speed, midi: last.pm });
       }
       const end = lr ? Math.min(last.qEnd, lr[1]) : last.qEnd;
-      pluck(ctx, synthGain, at(n.qStart), n.midi, ((end - n.qStart) / state.speed) * 0.95, n.vel,
+      pluck(ctx, synthGain, at(n.qStart), n.pm, ((end - n.qStart) / state.speed) * 0.95, n.vel,
         glides, CONFIG.playback.slide_time_ms / 1000 / state.speed);
     }
   }
@@ -791,10 +807,10 @@ function selectNote(id, show = true) {
   if (show) $('inspector').hidden = false;
   const tuning = state.song.tuning;
   const strName = (s) => noteName(tuning.strings[s], false);
-  $('insp-title').textContent = `${noteName(n.midi)} — ${strName(n.string)} string, fret ${n.fret}` +
+  $('insp-title').textContent = `${noteName(n.pm)} — ${strName(n.string)} string, fret ${n.fret}` +
     (n.outOfRange ? ' (out of range)' : '');
   const chips = $('insp-pos'); chips.innerHTML = '';
-  for (const c of positionsFor(n.midi, tuning, arrOpts().maxFret)) {
+  for (const c of positionsFor(n.pm, tuning, arrOpts().maxFret)) {
     const b = document.createElement('button');
     b.className = 'btn sm' + (c.s === n.string && c.f === n.fret ? ' on' : '');
     b.textContent = `${strName(c.s)} ${c.f}`;
@@ -809,7 +825,7 @@ function editSelected(fn) {
 }
 const shiftPitch = (d) => editSelected((n) => { n.midi += d; n.pinned = null; });
 const moveString = (d) => editSelected((n) => {
-  const pos = positionsFor(n.midi, state.song.tuning, arrOpts().maxFret);
+  const pos = positionsFor(n.pm, state.song.tuning, arrOpts().maxFret);
   const i = pos.findIndex((c) => c.s === n.string);
   const next = pos[i + d];
   if (next) n.pinned = next;
@@ -841,6 +857,15 @@ function mergePrev() {
   rearrange();
 }
 $('insp-merge').onclick = mergePrev;
+// Make the selected note beat 1 of a bar (keeps the tempo; earlier notes become a pickup).
+function useAsDownbeat() {
+  const n = state.song?.notes.find((x) => x.id === state.selected);
+  if (!n) return;
+  $('offset').value = n.start.toFixed(3);
+  rearrange();
+  toast('Bar lines moved: this note is now on beat 1.');
+}
+$('insp-downbeat').onclick = useAsDownbeat;
 
 /* ---------- export ---------- */
 function asciiTab() { return state.song ? toAsciiTab(state.song, `${state.title} — Bass Tab`) : ''; }
@@ -889,6 +914,9 @@ window.addEventListener('drop', (e) => {
 
 $('play').onclick = toggle;
 $('rewind').onclick = () => seek(state.loopOn && loopRange() ? loopRange()[0] : 0);
+$('key-down').onclick = () => setTranspose((state.transpose || 0) - 1);
+$('key-up').onclick = () => setTranspose((state.transpose || 0) + 1);
+$('transpose').onclick = () => setTranspose(0);
 $('slower').onclick = () => setSpeed(state.speed - STEP);
 $('faster').onclick = () => setSpeed(state.speed + STEP);
 $('loop').onclick = () => setLoopOn(!state.loopOn);
@@ -939,6 +967,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'i' || k === 'I') setIn();
   else if (k === 'o' || k === 'O') setOut();
   else if ((k === 'j' || k === 'J') && state.selected != null) mergePrev();
+  else if ((k === 'b' || k === 'B') && state.selected != null) useAsDownbeat();
   else if (k === 'm' || k === 'M') $('metro').click();
   else if (k === '[') setSpeed(state.speed - STEP);
   else if (k === ']') setSpeed(state.speed + STEP);

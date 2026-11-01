@@ -61,10 +61,11 @@
       <button class="btn sm" id="insp-oct-down">−8va</button>
       <button class="btn sm" id="insp-oct-up">+8va</button>
     </div>
-    <div class="insp-row"><button class="btn sm" id="insp-merge" title="Join this note onto the previous one (J)">Merge with previous</button>
+    <div class="insp-row"><button class="btn sm" id="insp-downbeat" title="Move the bar lines so this note is beat 1 (B)">Use as downbeat</button>
+      <button class="btn sm" id="insp-merge" title="Join this note onto the previous one (J)">Merge with previous</button>
       <button class="btn sm danger" id="insp-del">Delete note</button></div>
     <div class="insp-row">
-      <span class="muted small">Keys: ↑↓ string · +/− pitch · ←→ next note · J merge · Del</span></div>
+      <span class="muted small">Keys: ↑↓ string · +/− pitch · ←→ next note · B downbeat · J merge · Del</span></div>
   </div>
 
   <aside id="settings" class="drawer" hidden>
@@ -153,14 +154,20 @@
       <button class="tbtn sm" id="faster" title="Faster (])">+</button>
     </div>
     <div class="tgroup">
-      <button class="toggle" id="loop" title="Loop on/off (L)">⟲ Loop</button>
-      <button class="tbtn sm txt" id="loop-in" title="Set loop start at the cursor (I)">In</button>
-      <button class="tbtn sm txt" id="loop-out" title="Set loop end at the cursor (O)">Out</button>
+      <button class="toggle wide" id="loop" title="Loop on/off (L)">⟲ Loop</button>
+      <button class="toggle wide" id="loop-in" title="Set loop start at the cursor (I)">In</button>
+      <button class="toggle wide" id="loop-out" title="Set loop end at the cursor (O)">Out</button>
       <span class="loop-range" id="loop-range"></span>
     </div>
     <div class="tgroup">
       <button class="toggle" id="metro" title="Metronome (M)">Metronome</button>
       <button class="toggle" id="countin" title="Count-in before playing">Count-in</button>
+    </div>
+    <div class="tgroup">
+      <span class="tlabel">Key</span>
+      <button class="tbtn sm" id="key-down" title="Transpose down a semitone">−</button>
+      <button class="speed key" id="transpose" title="Transpose (semitones). Click to reset.">0</button>
+      <button class="tbtn sm" id="key-up" title="Transpose up a semitone">+</button>
     </div>
     <div class="tgroup">
       <button class="toggle" id="mixer-btn" title="Tracks & volumes">🎚 Mixer</button>
@@ -177,7 +184,7 @@
       <input type="range" id="vol-metro" min="0" max="1" step="0.01" value="0.6" aria-label="Metronome volume"></div>
     <div class="insp-row">
       <label class="btn sm"><input type="file" id="add-file" multiple hidden>+ Add tracks</label>
-      <span class="muted small"><b>TAB</b> = track the tab is made from · tap the icon to change the instrument, the name to rename · M mute · S solo</span>
+      <span class="muted small"><b>TAB</b> = track the tab is made from · tap the icon to change the instrument, the name to rename · M mute · S solo · 🔒 keep original pitch when transposing</span>
     </div>
   </section>
 
@@ -228,6 +235,7 @@
       <span class="kk"><kbd>←</kbd> <kbd>→</kbd></span><span>Previous / next note</span>
       <span class="kk"><kbd>↑</kbd> <kbd>↓</kbd></span><span>Move to another string</span>
       <span class="kk"><kbd>+</kbd> <kbd>−</kbd></span><span>Pitch up / down a semitone</span>
+      <span class="kk"><kbd>B</kbd></span><span>Use as downbeat (beat 1)</span>
       <span class="kk"><kbd>J</kbd></span><span>Merge with previous note</span>
       <span class="kk"><kbd>Del</kbd></span><span>Delete note</span>
       <h5>General</h5>

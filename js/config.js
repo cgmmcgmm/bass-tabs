@@ -8,7 +8,7 @@ export const DEFAULTS = {
     drag_to_loop: 'auto', speed_step_percent: 5, min_speed_percent: 25, max_speed_percent: 150, count_in: false, metronome: false,
     metronome_volume: 0.6, tab_synth_volume: 0, slide_time_ms: 60,
   },
-  mixer: { tab_track_match: 'bass' },
+  mixer: { tab_track_match: 'bass', unknown_label: 'Unknown' },
   helper: { url: '' },
   auto_labels: null, // null = built-in keywords (js/kinds.js)
 };

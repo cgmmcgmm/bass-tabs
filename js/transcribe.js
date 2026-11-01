@@ -345,7 +345,7 @@ function assignFrets(items, tuning, maxFret) {
   const strings = tuning.strings;
   const candsFor = (it) => {
     const nt = it.note;
-    let m = nt.midi;
+    let m = nt.pm;
     const lo = strings[0], hi = strings[strings.length - 1] + maxFret;
     nt.outOfRange = m < lo || m > hi;
     while (m < lo) m += 12;
@@ -418,6 +418,7 @@ export function arrange(notes, o) {
   const upS = 4 / o.grid; // 16th units per slot
   let offset = o.offset;
   const live = notes.filter((n) => !n.deleted).sort((a, b) => a.start - b.start);
+  for (const n of live) n.pm = n.midi + (o.transpose || 0); // pitch as shown/played (transposed)
   if (live.length) {
     const minq = Math.round((live[0].start - offset) / slotDur);
     if (minq < 0) offset -= Math.ceil(-minq / spb) * spb * slotDur;
@@ -444,7 +445,7 @@ export function arrange(notes, o) {
   assignFrets(items, o.tuning, o.maxFret);
   items.forEach((it, i) => {
     const prev = items[i - 1];
-    it.note.legatoDir = prev && it.note.midi < prev.note.midi ? -1 : 1;
+    it.note.legatoDir = prev && it.note.pm < prev.note.pm ? -1 : 1;
   });
 
   const last = items[items.length - 1];
@@ -494,7 +495,7 @@ export function arrange(notes, o) {
     if (pos < spb) addRest(pos, spb);
     bar.events = filled;
   }
-  return { bars, offset, slotDur, spb, grid: o.grid, bpm: o.bpm, beatsPerBar: o.beatsPerBar, tuning: o.tuning, notes: live };
+  return { bars, offset, slotDur, spb, grid: o.grid, bpm: o.bpm, beatsPerBar: o.beatsPerBar, tuning: o.tuning, notes: live, transpose: o.transpose || 0 };
 }
 
 /** Plain-text tab export. */

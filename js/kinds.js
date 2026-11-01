@@ -27,6 +27,14 @@ export const KINDS = {
     label: 'Other', color: '#7f8c8d',
     icon: svg('<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>'),
   },
+  backing: {
+    label: 'Backing track', color: '#16a085',
+    icon: svg('<path d="M12 3l9 4.5-9 4.5-9-4.5z"/><path d="M3 12l9 4.5 9-4.5"/><path d="M3 16.5L12 21l9-4.5"/>'),
+  },
+  unknown: {
+    label: 'Unknown', color: '#95a5a6',
+    icon: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1 1-1.1 1.8v.5"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>'),
+  },
   mix: {
     label: 'Full mix', color: '#34495e',
     icon: svg('<path d="M3 12h1M6 8v8M9 5v14M12 9v6M15 6v12M18 9v6M21 12h0"/>'),
@@ -40,7 +48,8 @@ export const DEFAULT_AUTO_LABELS = {
   other: 'other',
   bass: 'bass',
   drums: 'drum, kit, perc, kick, snare, cymbal, hihat, hi-hat',
-  vocals: 'vocal, vox, voice, sing, choir, backing',
+  backing: 'backing, playalong, play-along, minus',
+  vocals: 'vocal, vox, voice, sing, choir',
   guitar: 'guitar, gtr',
   keys: 'piano, keys, keyboard, organ, synth, rhodes',
   mix: 'mix, master, full, original',
@@ -70,9 +79,12 @@ export function detectKind(fileName) {
   return null;
 }
 
-/** Fill in kind + label for a track if missing. `single` = it's the only track. */
-export function autoLabel(track, single = false) {
-  if (!track.kind) track.kind = detectKind(track.name) || (single ? 'mix' : 'other');
-  if (!track.label) track.label = KINDS[track.kind].label;
+let unknownLabel = 'Unknown';
+export function setUnknownLabel(l) { if (l) unknownLabel = String(l); }
+
+/** Fill in kind + label for a track if missing. */
+export function autoLabel(track) {
+  if (!track.kind) track.kind = detectKind(track.name) || 'unknown';
+  if (!track.label) track.label = track.kind === 'unknown' ? unknownLabel : KINDS[track.kind].label;
   return track;
 }

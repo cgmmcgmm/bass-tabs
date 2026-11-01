@@ -11,6 +11,7 @@ export class Mixer extends EventTarget {
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {} // iOS: ignore silent switch
     this.tracks = [];
     this._rate = 1;
+    this._semis = 0;
     this._pos = 0; this._at = 0; this._playing = false;
     this.out = this.ctx.createGain();
     this.out.connect(this.ctx.destination);
@@ -41,12 +42,12 @@ export class Mixer extends EventTarget {
     const R = buffer.numberOfChannels > 1 ? buffer.getChannelData(1).slice() : null;
     const track = {
       id: nextId++, name: file.name, size: file.size, file, duration: buffer.duration,
-      vol: opts.vol ?? 1, mute: !!opts.mute, solo: !!opts.solo,
+      vol: opts.vol ?? 1, mute: !!opts.mute, solo: !!opts.solo, protect: !!opts.protect,
       ...(opts.remote ? { remote: opts.remote } : {}),
       ...(opts.label ? { label: opts.label } : {}), ...(opts.kind ? { kind: opts.kind } : {}),
     };
     this.tracks.push(track);
-    this.post({ type: 'add', id: track.id, L, R, gain: 0 }, R ? [L.buffer, R.buffer] : [L.buffer]);
+    this.post({ type: 'add', id: track.id, L, R, gain: 0, prot: track.protect }, R ? [L.buffer, R.buffer] : [L.buffer]);
     this.applyGains();
     this.dispatchEvent(new Event('tracks'));
     return { track, buffer };
@@ -70,7 +71,20 @@ export class Mixer extends EventTarget {
   }
   update(id, patch) {
     const t = this.tracks.find((x) => x.id === id);
-    if (t) { Object.assign(t, patch); this.applyGains(); }
+    if (!t) return;
+    Object.assign(t, patch);
+    if ('protect' in patch) this.post({ type: 'protect', id, on: t.protect });
+    this.applyGains();
+  }
+
+  /** Transpose (semitones) all tracks except protected ones. Independent of speed. */
+  get transpose() { return this._semis; }
+  set transpose(semis) {
+    this._pos = this.currentTime; this._at = this.ctx.currentTime;
+    this._semis = semis;
+    const pitch = Math.pow(2, semis / 12);
+    if (this.node) this.post({ type: 'pitch', pitch });
+    else this.ready.then(() => this.post({ type: 'pitch', pitch }));
   }
 
   /** Sample-accurate loop (seconds) or null. */

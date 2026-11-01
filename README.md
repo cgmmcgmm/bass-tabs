@@ -36,6 +36,7 @@ Then open http://localhost:8000. Click **Demo** to try it without a file. It als
   - All note edits.
 
   Audio isn't embedded. Keep the project file in the same folder as the audio files. To reopen, choose the `.basstab` together with its audio files (multi-select), Tracks are matched by file name. If some are missing, you're asked to locate them: choose the files, or (Chrome/Edge on desktop) **Look in a folder**, which loads only the listed files.
+- **Transpose**: the **Key** control (−12…+12 semitones) shifts the audio, the tab and the synth, independently of speed. Tracks with 🔒 in the Mixer keep their original pitch (for example your own recordings).
 - **Editing**: click a note to move it to another string or fret, change its pitch or octave, or delete it.
 - **Export**: plain-text tab (.txt), downloaded or copied.
 
@@ -52,6 +53,7 @@ Then open http://localhost:8000. Click **Demo** to try it without a file. It als
 | ↑ / ↓ | Move the selected note to another string |
 | + / − | Change the selected note's pitch |
 | ← / → | Previous / next note |
+| B | Use the selected note as the downbeat (beat 1) |
 | J | Merge the selected note into the previous one |
 | Del | Delete the selected note |
 | ? | Show all shortcuts |
